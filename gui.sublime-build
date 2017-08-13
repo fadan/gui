@@ -1,0 +1,18 @@
+{
+    "shell_cmd": "w:/gui/build.bat",
+    "file_regex": "^ *([A-z]:.*)[(]([0-9]+)[)]",
+
+    "variants":
+    [
+        {
+            "name": "Run",
+            "shell_cmd": "devenv /runexit w:/gui/win32_gui.sln"
+        },
+
+        {
+            "name": "Compile",
+            "shell_cmd": "w:/gui/build.bat",
+            "file_regex": "^ *([A-z]:.*)[(]([0-9]+)[)]"
+        }
+    ]
+}
