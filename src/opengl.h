@@ -22,6 +22,7 @@
 #define GL_SCISSOR_TEST                   0x0C11
 #define GL_SRC_ALPHA                      0x0302
 #define GL_STREAM_DRAW                    0x88E0
+#define GL_STATIC_DRAW                    0x88E4
 #define GL_TEXTURE0                       0x84C0
 #define GL_TEXTURE_2D                     0x0DE1
 #define GL_TEXTURE_MAG_FILTER             0x2800

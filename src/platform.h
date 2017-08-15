@@ -495,6 +495,15 @@ inline void *bootstrap_push_size(usize size, usize offset, MemoryStackParams par
     return result;
 }
 
+inline void init_memory_stack(MemoryStack *memstack, usize size, MemoryStackParams params = default_params())
+{
+    if (!memstack->memblock)
+    {
+        void *dummy = push_size(memstack, size, params);
+        memstack->memblock->used = 0;
+    }
+}
+
 inline TempMemoryStack begin_temp_memory(MemoryStack *memstack)
 {
     TempMemoryStack result = {0};
