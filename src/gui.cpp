@@ -156,6 +156,27 @@ static void add_rect_filled(UIState *ui, vec2 top_left_corner, vec2 bottom_right
     add_poly_filled(ui, vertices, array_count(vertices), color);
 }
 
+static void add_arc_filled(UIState *ui, vec2 center, f32 radius, u32 color, f32 start_angle, f32 end_angle)
+{
+    vec2 vertices[20];
+
+    f32 angle_step = (end_angle - start_angle) / (array_count(vertices) - 1);
+    for (u32 vertex_index = 0; vertex_index < array_count(vertices); ++vertex_index)
+    {
+        f32 angle = start_angle + (f32)vertex_index * angle_step;
+
+        vertices[vertex_index].x = center.x + cos32(angle) * radius;
+        vertices[vertex_index].y = center.y - sin32(angle) * radius;
+    }
+
+    add_poly_filled(ui, vertices, array_count(vertices), color);
+}
+
+inline void add_circle_filled(UIState *ui, vec2 center, f32 radius, u32 color)
+{
+    add_arc_filled(ui, center, radius, color, 0.0f, TAU32);
+}
+
 static UPDATE_AND_RENDER(update_and_render)
 {
     AppState *app_state = memory->app_state;
@@ -191,6 +212,12 @@ static UPDATE_AND_RENDER(update_and_render)
             vec2 max = v2(400, 400);
 
             add_rect_filled(ui, min, max, 0xFFFFFFFF);
+        }
+
+        {
+            vec2 center = v2(500, 500);
+
+            add_circle_filled(ui, center, 100.0f, 0xFFFFFFFF);
         }
     }
     render_ui(ui, window_width, window_height);
