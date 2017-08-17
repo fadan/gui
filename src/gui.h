@@ -1,4 +1,14 @@
 
+inline f32 inv_sqrt32(f32 a)
+{
+    union { f32 f; u32 u; } memory = {a};
+    memory.u = 0x5F375A86 - (memory.u >> 1);
+    memory.f *= 1.5f - (0.5f * a * memory.f * memory.f);
+    return memory.f;
+}
+
+#define sqrt32(a) ( (a) * inv_sqrt32(a) )
+
 union vec2
 {
     struct
@@ -14,6 +24,14 @@ inline vec2 v2(f32 x, f32 y)
     return result;
 }
 
+#define vec2_add(a, b)      v2( (a).x + (b).x,   (a).y + (b).y )
+#define vec2_sub(a, b)      v2( (a).x - (b).x,   (a).y - (b).y )
+
+#define vec2_mul(s, a)      v2( (s) * (a).x,  (s) * (a).y )
+
+#define vec2_length2(a)     ( (a).x * (a).x + (a).y * (a).y )
+#define vec2_length(a)      sqrt32(vec2_length2(a))
+
 union vec4
 {
     struct
@@ -26,6 +44,12 @@ union vec4
     };
     f32 e[4];
 };
+
+inline vec4 v4(f32 x, f32 y, f32 z, f32 w)
+{
+    vec4 result = {x, y, z, w};
+    return result;
+}
 
 #define TAU32 6.28318530717958647692f
 
@@ -78,8 +102,8 @@ enum
 
 struct Vertex
 {
-    f32 pos[2];
-    u8 color[4];
+    vec2 pos;
+    u32 color;
 };
 
 struct UIState

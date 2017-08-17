@@ -84,10 +84,6 @@ static void init_ui(UIState *ui, PlatformInput *input)
 
 static void render_ui(UIState *ui, i32 display_width, i32 display_height)
 {
-    gl.Viewport(0, 0, display_width, display_height);
-    gl.UseProgram(ui->program);
-    gl.BindVertexArray(ui->vao);
-
     GLfloat proj_mat[4][4] = 
     {
         { 2.0f / display_width, 0.0f,                  0.0f, 0.0f },
@@ -96,6 +92,9 @@ static void render_ui(UIState *ui, i32 display_width, i32 display_height)
         {-1.0f,                 1.0f,                  0.0f, 1.0f },
     };
 
+    gl.Viewport(0, 0, display_width, display_height);
+    gl.UseProgram(ui->program);
+    gl.BindVertexArray(ui->vao);
     gl.UniformMatrix4fv(ui->uniforms[uniform_proj_mat], 1, GL_FALSE, &proj_mat[0][0]);
 
     if (ui->num_elements)
@@ -110,10 +109,68 @@ static void render_ui(UIState *ui, i32 display_width, i32 display_height)
     }
 }
 
-inline vec4 v4(f32 x, f32 y, f32 z, f32 w)
+static void add_poly_outline(UIState *ui, vec2 *points, u32 point_count, u32 color, f32 thickness, b32 connect_last_with_first)
 {
-    vec4 result = {x, y, z, w};
-    return result;
+    u32 vertice_index = ui->num_vertices;
+    u32 element_index = ui->num_elements;
+
+    u32 num_points = point_count;
+    if (!connect_last_with_first)
+    {
+        --num_points;
+    }
+
+    u32 num_vertices = num_points * 4;
+    u32 num_elements = num_points * 6;
+
+    assert(ui->num_vertices + num_vertices < MAX_NUM_VERTICES);
+    assert(ui->num_elements + num_elements < MAX_NUM_ELEMENTS);
+
+    ui->num_vertices += num_vertices;
+    ui->num_elements += num_elements;
+
+    for (u32 point_index = 0; point_index < num_points; ++point_index)
+    {
+        u32 next_point_index = ((point_index + 1) == point_count) ? 0 : point_index + 1;
+
+        vec2 current_pos = points[point_index];
+        vec2 next_pos = points[next_point_index];
+
+        vec2 delta_pos = vec2_sub(next_pos, current_pos);
+        f32 delta_pos_length2 = vec2_length2(delta_pos);
+        f32 inv_delta_pos_length = inv_sqrt32(delta_pos_length2);
+
+        delta_pos = vec2_mul(0.5f * thickness * inv_delta_pos_length, delta_pos);
+
+        Vertex *vertex = ui->vertices + vertice_index;
+        GLuint *element = ui->elements + element_index;
+
+        vertex[0].pos.x = current_pos.x + delta_pos.y;
+        vertex[0].pos.y = current_pos.y - delta_pos.x;
+        vertex[0].color = color;
+
+        vertex[1].pos.x = next_pos.x + delta_pos.y;
+        vertex[1].pos.y = next_pos.y - delta_pos.x;
+        vertex[1].color = color;
+
+        vertex[2].pos.x = next_pos.x - delta_pos.y;
+        vertex[2].pos.y = next_pos.y + delta_pos.x;
+        vertex[2].color = color;
+
+        vertex[3].pos.x = current_pos.x - delta_pos.y;
+        vertex[3].pos.y = current_pos.y + delta_pos.x;
+        vertex[3].color = color;
+
+        element[0] = vertice_index + 0;
+        element[1] = vertice_index + 1;
+        element[2] = vertice_index + 2;
+        element[3] = vertice_index + 0;
+        element[4] = vertice_index + 2;
+        element[5] = vertice_index + 3;
+
+        vertice_index += 4;
+        element_index += 6;
+    }
 }
 
 static void add_poly_filled(UIState *ui, vec2 *vertices, u32 num_vertices, u32 color)
@@ -127,21 +184,32 @@ static void add_poly_filled(UIState *ui, vec2 *vertices, u32 num_vertices, u32 c
     for (u32 vertex_index = 0; vertex_index < num_vertices; ++vertex_index)
     {
         Vertex *vertex = ui->vertices + ui->num_vertices++;
-        vertex->pos[0] = vertices[vertex_index].x;
-        vertex->pos[1] = vertices[vertex_index].y;
-        *(u32 *)vertex->color = color;
+        vertex->pos.x = vertices[vertex_index].x;
+        vertex->pos.y = vertices[vertex_index].y;
+        vertex->color = color;
     }
 
     for (u32 element_index = 2; element_index < num_vertices; ++element_index)
     {
         GLuint *element = ui->elements + ui->num_elements;
-
         element[0] = start_vertice_index;
         element[1] = start_vertice_index + element_index - 1;
         element[2] = start_vertice_index + element_index;
 
         ui->num_elements += 3;
     }
+}
+
+static void add_rect_outline(UIState *ui, vec2 top_left_corner, vec2 bottom_right_corner, u32 color)
+{
+    vec2 vertices[] =
+    {
+        v2(top_left_corner.x, top_left_corner.y),
+        v2(top_left_corner.x, bottom_right_corner.y),
+        v2(bottom_right_corner.x, bottom_right_corner.y),
+        v2(bottom_right_corner.x, top_left_corner.y),
+    };
+    add_poly_outline(ui, vertices, array_count(vertices), color, 1.0f, true);
 }
 
 static void add_rect_filled(UIState *ui, vec2 top_left_corner, vec2 bottom_right_corner, u32 color)
@@ -156,25 +224,29 @@ static void add_rect_filled(UIState *ui, vec2 top_left_corner, vec2 bottom_right
     add_poly_filled(ui, vertices, array_count(vertices), color);
 }
 
-static void add_arc_filled(UIState *ui, vec2 center, f32 radius, u32 color, f32 start_angle, f32 end_angle)
+static void add_arc_filled(UIState *ui, vec2 center, f32 radius, u32 color, f32 start_angle, f32 end_angle, u32 num_segments)
 {
-    vec2 vertices[20];
-
-    f32 angle_step = (end_angle - start_angle) / (array_count(vertices) - 1);
-    for (u32 vertex_index = 0; vertex_index < array_count(vertices); ++vertex_index)
+    TempMemoryStack temp_memory = begin_temp_memory(&ui->memory);
     {
-        f32 angle = start_angle + (f32)vertex_index * angle_step;
+        vec2 *vertices = push_array(&ui->memory, num_segments + 1, vec2);
 
-        vertices[vertex_index].x = center.x + cos32(angle) * radius;
-        vertices[vertex_index].y = center.y - sin32(angle) * radius;
+        f32 angle_step = (end_angle - start_angle) / num_segments;
+        for (u32 vertex_index = 0; vertex_index <= num_segments; ++vertex_index)
+        {
+            f32 angle = start_angle + (f32)vertex_index * angle_step;
+
+            vertices[vertex_index].x = center.x + cos32(angle) * radius;
+            vertices[vertex_index].y = center.y - sin32(angle) * radius;
+        }
+
+        add_poly_filled(ui, vertices, num_segments + 1, color);
     }
-
-    add_poly_filled(ui, vertices, array_count(vertices), color);
+    end_temp_memory(temp_memory);
 }
 
 inline void add_circle_filled(UIState *ui, vec2 center, f32 radius, u32 color)
 {
-    add_arc_filled(ui, center, radius, color, 0.0f, TAU32);
+    add_arc_filled(ui, center, radius, color, 0.0f, TAU32, 24);
 }
 
 static UPDATE_AND_RENDER(update_and_render)
@@ -204,20 +276,45 @@ static UPDATE_AND_RENDER(update_and_render)
             vec2 min = v2(20, 20);
             vec2 max = v2(200, 200);
 
-            add_rect_filled(ui, min, max, 0xFFFFFFFF);
+            add_rect_filled(ui, min, max, 0xFF00FFFF);
         }
 
         {
             vec2 min = v2(200, 200);
             vec2 max = v2(400, 400);
 
-            add_rect_filled(ui, min, max, 0xFFFFFFFF);
+            add_rect_filled(ui, min, max, 0x00FF00FF);
         }
 
         {
             vec2 center = v2(500, 500);
 
             add_circle_filled(ui, center, 100.0f, 0xFFFFFFFF);
+        }
+
+        {
+            vec2 points[] =
+            {
+                v2(500, 200),
+                v2(550, 300),
+                v2(600, 200),
+            };
+
+            add_poly_outline(ui, points, array_count(points), 0xFFFFFFFF, 1.0f, true);
+        }
+
+        {
+            vec2 min = v2(600, 100);
+            vec2 max = v2(700, 200);
+
+            add_rect_outline(ui, min, max, 0xFFFFFFFF);
+        }
+
+        {
+            vec2 min = v2(200, 200);
+            vec2 max = v2(400, 400);
+
+            add_rect_outline(ui, min, max, 0xFFFFFFFF);
         }
     }
     render_ui(ui, window_width, window_height);
