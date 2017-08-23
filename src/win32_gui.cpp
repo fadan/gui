@@ -377,6 +377,17 @@ static PLATFORM_DEALLOCATE(win32_deallocate)
     }
 }
 
+static PLATFORM_VIRTUAL_ALLOC(win32_virtual_alloc)
+{
+    void *memory = win32_api->VirtualAlloc(0, size, 0x2000 /* MEM_RESERVE */ | 0x1000 /* MEM_COMMIT */, 0x04 /* PAGE_READWRITE */);
+    return memory;
+}
+
+static PLATFORM_VIRTUAL_FREE(win32_virtual_free)
+{
+    win32_api->VirtualFree(memory, 0, 0x8000 /* MEM_RELEASE */);
+}
+
 static PLATFORM_GET_MEMORY_STATS(win32_get_memory_stats)
 {
     PlatformMemoryStats result = {0};
@@ -428,6 +439,9 @@ int __stdcall WinMain(HINSTANCE instance, HINSTANCE prev_instance, char *cmd_lin
     win32_state->app_memory.platform.deallocate = win32_deallocate;
     win32_state->app_memory.platform.get_memory_stats = win32_get_memory_stats;
     win32_state->app_memory.platform.init_opengl = win32_init_opengl;
+
+    win32_state->app_memory.platform.virtual_alloc = win32_virtual_alloc;
+    win32_state->app_memory.platform.virtual_free = win32_virtual_free;
 
     platform = win32_state->app_memory.platform;
 

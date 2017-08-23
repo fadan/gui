@@ -42,6 +42,10 @@
 #define GL_DEBUG_OUTPUT_SYNCHRONOUS       0x8242
 #define GL_DEBUG_SEVERITY_HIGH            0x9146
 
+#define GL_UNPACK_ALIGNMENT               0x0CF5
+#define GL_RED                            0x1903
+#define GL_RGB                            0x1907
+
 typedef unsigned int GLenum;
 typedef unsigned char GLboolean;
 typedef unsigned int GLbitfield;
@@ -106,6 +110,10 @@ typedef void (__stdcall * PFNGLUNIFORM1FPROC) (GLint location, GLfloat v0);
 typedef void (__stdcall * PFNGLUNIFORMMATRIX4FVPROC) (GLint location, GLsizei count, GLboolean transpose, const GLfloat *value);
 typedef void (__stdcall * PFNGLUNIFORM4FVPROC) (GLint location, GLsizei count, const GLfloat *value);
 
+//
+
+typedef void (__stdcall * PFNGLPIXELSTOREIPROC) (GLenum pname, GLint param);
+
 // 
 
 typedef void (__stdcall * PFNGLVERTEX2FPROC)(GLfloat x, GLfloat y);
@@ -160,7 +168,9 @@ typedef void (__stdcall * PFNGLDEBUGMESSAGECALLBACKPROC)(GLDEBUGPROCARB callback
     GLCORE(DRAWARRAYS, DrawArrays) \
     GLCORE(MATRIXMODE, MatrixMode) \
     GLCORE(LOADIDENTITY, LoadIdentity) \
-    GLCORE(LOADMATRIXF, LoadMatrixf)
+    GLCORE(LOADMATRIXF, LoadMatrixf) \
+    \
+    GLCORE(PIXELSTOREI, PixelStorei)
 
 #define GL_FUNCITON_LIST \
     GLCORE(ACTIVETEXTURE,               ActiveTexture) \

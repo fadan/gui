@@ -1,5 +1,25 @@
 #include "gui.h"
 
+#define STBTT_ifloor        floor32
+#define STBTT_iceil         ceil32
+#define STBTT_sqrt          sqrt32
+#define STBTT_pow           pow32
+#define STBTT_cos           cos32
+#define STBTT_acos          acos32
+#define STBTT_fabs          abs32
+#define STBTT_fmod          mod32
+#define STBTT_malloc(x, u)  platform.virtual_alloc(x)
+#define STBTT_free(x, u)    platform.virtual_free(x)
+#define STBTT_assert        assert
+#define STBTT_strlen        string_length
+#define STBTT_memcpy        copy_memory
+#define STBTT_memset        set_memory
+
+#define NULL 0
+#define STBTT_STATIC
+#define STB_TRUETYPE_IMPLEMENTATION
+#include "stb_truetype.h"
+
 struct AppState
 {
     MemoryStack app_memory;
@@ -49,6 +69,9 @@ static char *ui_fragment_shader = R"GLSL(
 #define MAX_NUM_VERTICES 1024
 #define MAX_NUM_ELEMENTS 1024
 
+#include "ui_data.h"
+#include "font.h"
+
 static void init_ui(UIState *ui, PlatformInput *input)
 {
     ui->input = input;
@@ -80,6 +103,17 @@ static void init_ui(UIState *ui, PlatformInput *input)
 
     gl.VertexAttribPointer(ui->attribs[attrib_pos],   2, GL_FLOAT,         GL_FALSE, sizeof(Vertex), (void *)offset_of(Vertex, pos));
     gl.VertexAttribPointer(ui->attribs[attrib_color], 4, GL_UNSIGNED_BYTE, GL_TRUE,  sizeof(Vertex), (void *)offset_of(Vertex, color));
+
+    init_memory_stack(&ui->font_memory, 1*MB);
+    init_default_ui_texture(ui);
+
+    Font *font = &ui->default_font;
+
+    gl.GenTextures(1, &ui->texture);
+    gl.BindTexture(GL_TEXTURE_2D, ui->texture);
+    gl.TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    gl.TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    gl.TexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, font->texture_width, font->texture_height, 0, GL_RGBA, GL_UNSIGNED_BYTE, font->texture_pixels);
 }
 
 static void render_ui(UIState *ui, i32 display_width, i32 display_height)
@@ -107,6 +141,9 @@ static void render_ui(UIState *ui, i32 display_width, i32 display_height)
 
         gl.DrawElements(GL_TRIANGLES, ui->num_elements, GL_UNSIGNED_INT, 0);
     }
+
+    ui->num_elements = 0;
+    ui->num_vertices = 0;
 }
 
 static void add_poly_outline(UIState *ui, vec2 *points, u32 point_count, u32 color, f32 thickness, b32 connect_last_with_first)
@@ -318,7 +355,4 @@ static UPDATE_AND_RENDER(update_and_render)
         }
     }
     render_ui(ui, window_width, window_height);
-
-    ui->num_elements = 0;
-    ui->num_vertices = 0;
 }

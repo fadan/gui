@@ -62,6 +62,8 @@ typedef i32    b32;
 typedef float  f32;
 typedef double f64;
 
+typedef u16 unichar;
+
 #if ARCH == ARCH_64_BIT
     typedef u64     usize;
     typedef i64     isize;
@@ -310,12 +312,21 @@ typedef PLATFORM_DEALLOCATE(PlatformDeallocate);
 typedef PLATFORM_GET_MEMORY_STATS(PlatformGetMemoryStats);
 typedef PLATFORM_INIT_OPENGL(PlatformInitOpenGL);
 
+#define PLATFORM_VIRTUAL_ALLOC(name)    void *name(usize size)
+#define PLATFORM_VIRTUAL_FREE(name)     void name(void *memory)
+
+typedef PLATFORM_VIRTUAL_ALLOC(PlatformVirtualAlloc);
+typedef PLATFORM_VIRTUAL_FREE(PlatformVirtualFree);
+
 struct Platform
 {
     PlatformAllocate *allocate;
     PlatformDeallocate *deallocate;
     PlatformGetMemoryStats *get_memory_stats;
     PlatformInitOpenGL *init_opengl;
+
+    PlatformVirtualAlloc *virtual_alloc;
+    PlatformVirtualFree *virtual_free;
 };
 
 extern Platform platform;
@@ -440,10 +451,11 @@ inline void *push_size(MemoryStack *memstack, usize size, MemoryStackParams para
 
     if (!memstack->memblock || ((memstack->memblock->used + effective_size) > memstack->memblock->size))
     {
-        if (!memstack->min_stack_size)
-        {
+        // TODO(dan): debug this, sometimes contains garbage!!!
+        // if (!memstack->min_stack_size)
+        // {
             memstack->min_stack_size = DEFAULT_MEMORY_STACK_SIZE;
-        }
+        // }
 
         effective_size = size;
         usize stack_size = max(effective_size, memstack->min_stack_size);
