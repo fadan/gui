@@ -348,24 +348,96 @@ inline void add_circle_filled(UIState *ui, vec2 center, f32 radius, u32 color)
     add_arc_filled(ui, center, radius, color, 0.0f, TAU32, 24);
 }
 
-static void add_char(UIState *ui, unichar c, vec2 pos, f32 size, u32 color)
+static u32 read_unicode(u8 **utf8_bytes_start, u8 *utf8_bytes_end, u32 default_unicode = 0)
 {
-    Font *font = &ui->default_font;
-    Glyph *glyph = 0;
-    if (c < font->num_glyphs)
+    // NOTE(dan): to get the unicode: extract x-es and glue them together
+    // 0x    0 - 0x    7F:  0xxx xxxx                                      // ascii
+    // 0x   80 - 0x   7FF:  110x xxxx  10xx xxxx                           // 1100 0000 == 0xC0
+    // 0x  800 - 0x 7FFFF:  1110 xxxx  10xx xxxx  10xx xxxx                // 1110 0000 == 0xE0
+    // 0x10000 - 0x1FFFFF:  1111 0xxx  10xx xxxx  10xx xxxx  10xx xxxx     // 1111 0000 == 0xF0
+    u32 unicode = default_unicode;
+    u32 num_bytes_read = 0;
+
+    u8 *c = *utf8_bytes_start;
+
+    if (*c < 0x80) // NOTE(dan): 1 byte - ascii
     {
-        u16 glyph_index = font->glyph_index_lut[c];
-        glyph = font->glyphs + glyph_index;
+        unicode = *c;
+        num_bytes_read = 1;
+    }
+    else if ((*c & 0xE0) == 0xC0) // NOTE(dan): 2 bytes
+    {
+        if (c + 1 < utf8_bytes_end)
+        {
+            u8 byte_0_bits = c[0] & 0x1F;
+            u8 byte_1_bits = c[1] & 0x3F;
+
+            unicode = (byte_0_bits << 6) | byte_1_bits;
+        }
+        num_bytes_read = 2;
+    }
+    else if ((*c & 0xF0) == 0xE0) // NOTE(dan): 3 bytes
+    {
+        if (c + 2 < utf8_bytes_end)
+        {
+            u8 byte_0_bits = c[0] & 0x0F;
+            u8 byte_1_bits = c[1] & 0x3F;
+            u8 byte_2_bits = c[2] & 0x3F;
+
+            unicode = (byte_0_bits << 12) | (byte_1_bits << 6) | byte_2_bits;
+        }
+        num_bytes_read = 3;
+    }
+    else // NOTE(dan): 4 bytes
+    {
+        assert((*c & 0xF8) == 0xF0);
+        if (c + 3 < utf8_bytes_end)
+        {
+            u8 byte_0_bits = c[0] & 0x07;
+            u8 byte_1_bits = c[1] & 0x3F;
+            u8 byte_2_bits = c[2] & 0x3F;
+            u8 byte_3_bits = c[3] & 0x3F;
+
+            unicode = (byte_0_bits << 18) | (byte_1_bits << 12) | (byte_2_bits << 6) | byte_3_bits;
+        }
+        num_bytes_read = 4;
     }
 
-    if (glyph)
+    *utf8_bytes_start += num_bytes_read;
+    return unicode;
+}
+
+static void add_text(UIState *ui, char *text, vec2 pos, f32 size, u32 color)
+{
+    Font *font = &ui->default_font;
+    char *at = text;
+    char *end = text + string_length(text);
+    vec2 at_pos = pos;
+    f32 scale = size / font->size;
+
+    while (at < end)
     {
-        f32 scale = size / font->size;
+        u32 unicode = read_unicode((u8 **)&at, (u8 *)end);
+        if (!unicode)
+        {
+            break;
+        }
 
-        vec2 top_left_corner     = vec2_mul(scale, vec2_add(pos, glyph->min_pos));
-        vec2 bottom_right_corner = vec2_mul(scale, vec2_add(pos, glyph->max_pos));
+        // TODO(dan): 0xFF -> max unicode codepoint
+        unichar c = (unichar)unicode;
+        if (c < 0xFF)
+        {
+            u16 glyph_index = font->glyph_index_lut[c];
+            Glyph *glyph = font->glyphs + glyph_index;
 
-        add_textured_quad(ui, top_left_corner, bottom_right_corner, glyph->min_uv, glyph->max_uv, color);
+            vec2 top_left_corner     = vec2_add(at_pos, vec2_mul(scale, glyph->min_pos));
+            vec2 bottom_right_corner = vec2_add(at_pos, vec2_mul(scale, glyph->max_pos));
+
+            add_textured_quad(ui, top_left_corner, bottom_right_corner, glyph->min_uv, glyph->max_uv, color);
+
+            // TODO(dan): wordwrap, clip
+            at_pos.x += scale * glyph->advance_x;
+        }
     }
 }
 
@@ -438,7 +510,10 @@ static UPDATE_AND_RENDER(update_and_render)
         }
 
         {
-            add_char(ui, 'A', v2(100, 500), 13.0f, 0xFFFFFFFF);
+            char *text = "árvíztűrő tükörfúrógép";
+
+            add_text(ui, "A", v2(100, 500), 13.0f, 0xFFFFFFFF);
+            add_text(ui, text, v2(100, 550), 13.0f, 0xFFFFFFFF);
         }
     }
     render_ui(ui, window_width, window_height);
