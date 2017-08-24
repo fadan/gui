@@ -194,8 +194,17 @@ static void init_default_ui_texture(UIState *ui)
             u32 *dest_pixel = (u32 *)font->texture_pixels + pixel_index;
             u8 *src_pixel = (u8 *)font->texture_pixels + pixel_index;
 
-            *dest_pixel = 0xFFFFFF | (*src_pixel << 24);
+            *dest_pixel = 0xFFFFFF | ((*src_pixel) << 24);
         }
+
+        font->texture_pixels[0] = 0xFF;
+        font->texture_pixels[1] = 0xFF;
+        font->texture_pixels[2] = 0xFF;
+        font->texture_pixels[3] = 0xFF;
+
+        vec2 white_pixel_uv_scale = v2(1.0f / font->texture_width, 1.0f / font->texture_height);
+        font->white_pixel_uv = vec2_hadamard(white_pixel_uv_scale, vec2_add(default_texture_rect, v2(0.5f, 0.5f)));
+
     }
     // end_temp_memory(temp_memory);
 }

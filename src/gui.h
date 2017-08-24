@@ -165,6 +165,10 @@ union vec2
     {
         f32 x, y;
     };
+    struct
+    {
+        f32 u, v;
+    };
     f32 e[2];
 };
 
@@ -263,7 +267,7 @@ enum
 struct Vertex
 {
     vec2 pos;
-    // vec2 uv;
+    vec2 uv;
     u32 color;
 };
 

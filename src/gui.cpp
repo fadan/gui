@@ -42,27 +42,33 @@ static char *ui_vertex_shader = R"GLSL(
     uniform mat4 proj_mat;
 
     in vec2 pos;
+    in vec2 uv;
     in vec4 color;
 
+    out vec2 frag_uv;
     out vec4 frag_color;
 
     void main()
     {
+        frag_uv = uv;
         frag_color = color;
-        gl_Position = proj_mat * vec4(pos, 0.0f, 1.0f);
+        gl_Position = proj_mat * vec4(pos.xy, 0.0f, 1.0f);
     }
 )GLSL";
 
 static char *ui_fragment_shader = R"GLSL(
     #version 330
 
+    uniform sampler2D tex;
+
+    in vec2 frag_uv;
     in vec4 frag_color;
     
     out vec4 out_color;
 
     void main()
     {
-        out_color = frag_color;
+        out_color = frag_color * texture(tex, frag_uv);
     }
 )GLSL";
 
@@ -94,14 +100,18 @@ static void init_ui(UIState *ui, PlatformInput *input)
     gl.BindBuffer(GL_ELEMENT_ARRAY_BUFFER, ui->ebo);
 
     ui->uniforms[uniform_proj_mat] = gl.GetUniformLocation(ui->program, "proj_mat");
+    ui->uniforms[uniform_tex]      = gl.GetUniformLocation(ui->program, "tex");
     
     ui->attribs[attrib_pos]   = gl.GetAttribLocation(ui->program, "pos");
+    ui->attribs[attrib_uv]    = gl.GetAttribLocation(ui->program, "uv");
     ui->attribs[attrib_color] = gl.GetAttribLocation(ui->program, "color");
 
     gl.EnableVertexAttribArray(ui->attribs[attrib_pos]);
+    gl.EnableVertexAttribArray(ui->attribs[attrib_uv]);
     gl.EnableVertexAttribArray(ui->attribs[attrib_color]);
 
     gl.VertexAttribPointer(ui->attribs[attrib_pos],   2, GL_FLOAT,         GL_FALSE, sizeof(Vertex), (void *)offset_of(Vertex, pos));
+    gl.VertexAttribPointer(ui->attribs[attrib_uv],    2, GL_FLOAT,         GL_FALSE, sizeof(Vertex), (void *)offset_of(Vertex, uv));
     gl.VertexAttribPointer(ui->attribs[attrib_color], 4, GL_UNSIGNED_BYTE, GL_TRUE,  sizeof(Vertex), (void *)offset_of(Vertex, color));
 
     init_memory_stack(&ui->font_memory, 1*MB);
@@ -129,7 +139,16 @@ static void render_ui(UIState *ui, i32 display_width, i32 display_height)
     gl.Viewport(0, 0, display_width, display_height);
     gl.UseProgram(ui->program);
     gl.BindVertexArray(ui->vao);
+    gl.Uniform1i(ui->uniforms[uniform_tex], 0);
     gl.UniformMatrix4fv(ui->uniforms[uniform_proj_mat], 1, GL_FALSE, &proj_mat[0][0]);
+    gl.Enable(GL_BLEND);
+    gl.BlendEquation(GL_FUNC_ADD);
+    gl.BlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    gl.Disable(GL_CULL_FACE);
+    gl.Disable(GL_DEPTH_TEST);
+
+    gl.ActiveTexture(GL_TEXTURE0);
+    gl.BindTexture(GL_TEXTURE_2D, ui->texture);
 
     if (ui->num_elements)
     {
@@ -184,18 +203,22 @@ static void add_poly_outline(UIState *ui, vec2 *points, u32 point_count, u32 col
 
         vertex[0].pos.x = current_pos.x + delta_pos.y;
         vertex[0].pos.y = current_pos.y - delta_pos.x;
+        vertex[0].uv = ui->default_font.white_pixel_uv;
         vertex[0].color = color;
 
         vertex[1].pos.x = next_pos.x + delta_pos.y;
         vertex[1].pos.y = next_pos.y - delta_pos.x;
+        vertex[1].uv = ui->default_font.white_pixel_uv;
         vertex[1].color = color;
 
         vertex[2].pos.x = next_pos.x - delta_pos.y;
         vertex[2].pos.y = next_pos.y + delta_pos.x;
+        vertex[2].uv = ui->default_font.white_pixel_uv;
         vertex[2].color = color;
 
         vertex[3].pos.x = current_pos.x - delta_pos.y;
         vertex[3].pos.y = current_pos.y + delta_pos.x;
+        vertex[3].uv = ui->default_font.white_pixel_uv;
         vertex[3].color = color;
 
         element[0] = vertice_index + 0;
@@ -208,6 +231,44 @@ static void add_poly_outline(UIState *ui, vec2 *points, u32 point_count, u32 col
         vertice_index += 4;
         element_index += 6;
     }
+}
+
+static void add_textured_quad(UIState *ui, vec2 top_left_corner, vec2 bottom_right_corner, 
+                              vec2 top_left_corner_uv, vec2 bottom_right_corner_uv, u32 color)
+{
+    u32 vertice_index = ui->num_vertices;
+
+    assert(ui->num_vertices + 4 < MAX_NUM_VERTICES);
+    assert(ui->num_elements + 6 < MAX_NUM_ELEMENTS);
+
+    Vertex *vertices = ui->vertices + ui->num_vertices;
+    GLuint *elements = ui->elements + ui->num_elements;
+
+    vertices[0].pos = v2(top_left_corner.x, top_left_corner.y);
+    vertices[0].uv = v2(top_left_corner_uv.u, top_left_corner_uv.v);
+    vertices[0].color = color;
+
+    vertices[1].pos = v2(top_left_corner.x, bottom_right_corner.y);
+    vertices[1].uv = v2(top_left_corner_uv.u, bottom_right_corner_uv.v);
+    vertices[1].color = color;
+
+    vertices[2].pos = v2(bottom_right_corner.x, bottom_right_corner.y);
+    vertices[2].uv = v2(bottom_right_corner_uv.u, bottom_right_corner_uv.v);
+    vertices[2].color = color;
+
+    vertices[3].pos = v2(bottom_right_corner.x, top_left_corner.y);
+    vertices[3].uv = v2(bottom_right_corner_uv.u, top_left_corner_uv.v);
+    vertices[3].color = color;
+
+    elements[0] = vertice_index + 0;
+    elements[1] = vertice_index + 1;
+    elements[2] = vertice_index + 2;
+    elements[3] = vertice_index + 0;
+    elements[4] = vertice_index + 2;
+    elements[5] = vertice_index + 3;
+
+    ui->num_vertices += 4;
+    ui->num_elements += 6;
 }
 
 static void add_poly_filled(UIState *ui, vec2 *vertices, u32 num_vertices, u32 color)
@@ -223,6 +284,7 @@ static void add_poly_filled(UIState *ui, vec2 *vertices, u32 num_vertices, u32 c
         Vertex *vertex = ui->vertices + ui->num_vertices++;
         vertex->pos.x = vertices[vertex_index].x;
         vertex->pos.y = vertices[vertex_index].y;
+        vertex->uv = ui->default_font.white_pixel_uv;
         vertex->color = color;
     }
 
@@ -286,6 +348,27 @@ inline void add_circle_filled(UIState *ui, vec2 center, f32 radius, u32 color)
     add_arc_filled(ui, center, radius, color, 0.0f, TAU32, 24);
 }
 
+static void add_char(UIState *ui, unichar c, vec2 pos, f32 size, u32 color)
+{
+    Font *font = &ui->default_font;
+    Glyph *glyph = 0;
+    if (c < font->num_glyphs)
+    {
+        u16 glyph_index = font->glyph_index_lut[c];
+        glyph = font->glyphs + glyph_index;
+    }
+
+    if (glyph)
+    {
+        f32 scale = size / font->size;
+
+        vec2 top_left_corner     = vec2_mul(scale, vec2_add(pos, glyph->min_pos));
+        vec2 bottom_right_corner = vec2_mul(scale, vec2_add(pos, glyph->max_pos));
+
+        add_textured_quad(ui, top_left_corner, bottom_right_corner, glyph->min_uv, glyph->max_uv, color);
+    }
+}
+
 static UPDATE_AND_RENDER(update_and_render)
 {
     AppState *app_state = memory->app_state;
@@ -320,7 +403,7 @@ static UPDATE_AND_RENDER(update_and_render)
             vec2 min = v2(200, 200);
             vec2 max = v2(400, 400);
 
-            add_rect_filled(ui, min, max, 0x00FF00FF);
+            add_rect_filled(ui, min, max, 0xFFFF00FF);
         }
 
         {
@@ -352,6 +435,10 @@ static UPDATE_AND_RENDER(update_and_render)
             vec2 max = v2(400, 400);
 
             add_rect_outline(ui, min, max, 0xFFFFFFFF);
+        }
+
+        {
+            add_char(ui, 'A', v2(100, 500), 13.0f, 0xFFFFFFFF);
         }
     }
     render_ui(ui, window_width, window_height);
