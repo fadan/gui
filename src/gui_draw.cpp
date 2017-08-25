@@ -1,3 +1,359 @@
+
+static void add_poly_outline(UIState *ui, vec2 *points, u32 point_count, u32 color, f32 thickness, b32 connect_last_with_first)
+{
+    u32 vertice_index = ui->num_vertices;
+    u32 element_index = ui->num_elements;
+
+    u32 num_points = point_count;
+    if (!connect_last_with_first)
+    {
+        --num_points;
+    }
+
+    u32 num_vertices = num_points * 4;
+    u32 num_elements = num_points * 6;
+
+    assert(ui->num_vertices + num_vertices < MAX_NUM_VERTICES);
+    assert(ui->num_elements + num_elements < MAX_NUM_ELEMENTS);
+
+    ui->num_vertices += num_vertices;
+    ui->num_elements += num_elements;
+
+    for (u32 point_index = 0; point_index < num_points; ++point_index)
+    {
+        u32 next_point_index = ((point_index + 1) == point_count) ? 0 : point_index + 1;
+
+        vec2 current_pos = points[point_index];
+        vec2 next_pos = points[next_point_index];
+
+        vec2 delta_pos = vec2_sub(next_pos, current_pos);
+        f32 delta_pos_length2 = vec2_length2(delta_pos);
+        f32 inv_delta_pos_length = inv_sqrt32(delta_pos_length2);
+
+        delta_pos = vec2_mul(0.5f * thickness * inv_delta_pos_length, delta_pos);
+
+        Vertex *vertex = ui->vertices + vertice_index;
+        GLuint *element = ui->elements + element_index;
+
+        vertex[0].pos.x = current_pos.x + delta_pos.y;
+        vertex[0].pos.y = current_pos.y - delta_pos.x;
+        vertex[0].uv = ui->default_font.white_pixel_uv;
+        vertex[0].color = color;
+
+        vertex[1].pos.x = next_pos.x + delta_pos.y;
+        vertex[1].pos.y = next_pos.y - delta_pos.x;
+        vertex[1].uv = ui->default_font.white_pixel_uv;
+        vertex[1].color = color;
+
+        vertex[2].pos.x = next_pos.x - delta_pos.y;
+        vertex[2].pos.y = next_pos.y + delta_pos.x;
+        vertex[2].uv = ui->default_font.white_pixel_uv;
+        vertex[2].color = color;
+
+        vertex[3].pos.x = current_pos.x - delta_pos.y;
+        vertex[3].pos.y = current_pos.y + delta_pos.x;
+        vertex[3].uv = ui->default_font.white_pixel_uv;
+        vertex[3].color = color;
+
+        element[0] = vertice_index + 0;
+        element[1] = vertice_index + 1;
+        element[2] = vertice_index + 2;
+        element[3] = vertice_index + 0;
+        element[4] = vertice_index + 2;
+        element[5] = vertice_index + 3;
+
+        vertice_index += 4;
+        element_index += 6;
+    }
+}
+
+static void add_textured_quad(UIState *ui, vec2 top_left_corner, vec2 bottom_right_corner, 
+                              vec2 top_left_corner_uv, vec2 bottom_right_corner_uv, u32 color)
+{
+    u32 vertice_index = ui->num_vertices;
+
+    assert(ui->num_vertices + 4 < MAX_NUM_VERTICES);
+    assert(ui->num_elements + 6 < MAX_NUM_ELEMENTS);
+
+    Vertex *vertices = ui->vertices + ui->num_vertices;
+    GLuint *elements = ui->elements + ui->num_elements;
+
+    vertices[0].pos = v2(top_left_corner.x, top_left_corner.y);
+    vertices[0].uv = v2(top_left_corner_uv.u, top_left_corner_uv.v);
+    vertices[0].color = color;
+
+    vertices[1].pos = v2(top_left_corner.x, bottom_right_corner.y);
+    vertices[1].uv = v2(top_left_corner_uv.u, bottom_right_corner_uv.v);
+    vertices[1].color = color;
+
+    vertices[2].pos = v2(bottom_right_corner.x, bottom_right_corner.y);
+    vertices[2].uv = v2(bottom_right_corner_uv.u, bottom_right_corner_uv.v);
+    vertices[2].color = color;
+
+    vertices[3].pos = v2(bottom_right_corner.x, top_left_corner.y);
+    vertices[3].uv = v2(bottom_right_corner_uv.u, top_left_corner_uv.v);
+    vertices[3].color = color;
+
+    elements[0] = vertice_index + 0;
+    elements[1] = vertice_index + 1;
+    elements[2] = vertice_index + 2;
+    elements[3] = vertice_index + 0;
+    elements[4] = vertice_index + 2;
+    elements[5] = vertice_index + 3;
+
+    ui->num_vertices += 4;
+    ui->num_elements += 6;
+}
+
+static void add_color_quad(UIState *ui, vec2 top_left_corner, vec2 bottom_right_corner, 
+                           u32 top_left_color, u32 top_right_color,
+                           u32 bottom_left_color, u32 bottom_right_color)
+{
+    u32 vertice_index = ui->num_vertices;
+    vec2 uv = ui->default_font.white_pixel_uv;
+
+    assert(ui->num_vertices + 4 < MAX_NUM_VERTICES);
+    assert(ui->num_elements + 6 < MAX_NUM_ELEMENTS);
+
+    Vertex *vertices = ui->vertices + ui->num_vertices;
+    GLuint *elements = ui->elements + ui->num_elements;
+
+    vertices[0].pos = v2(top_left_corner.x, top_left_corner.y);
+    vertices[0].uv = uv;
+    vertices[0].color = top_left_color;
+
+    vertices[1].pos = v2(top_left_corner.x, bottom_right_corner.y);
+    vertices[1].uv = uv;
+    vertices[1].color = bottom_left_color;
+
+    vertices[2].pos = v2(bottom_right_corner.x, bottom_right_corner.y);
+    vertices[2].uv = uv;
+    vertices[2].color = bottom_right_color;
+
+    vertices[3].pos = v2(bottom_right_corner.x, top_left_corner.y);
+    vertices[3].uv = uv;
+    vertices[3].color = top_right_color;
+
+    elements[0] = vertice_index + 0;
+    elements[1] = vertice_index + 1;
+    elements[2] = vertice_index + 2;
+    elements[3] = vertice_index + 0;
+    elements[4] = vertice_index + 2;
+    elements[5] = vertice_index + 3;
+
+    ui->num_vertices += 4;
+    ui->num_elements += 6;
+}
+
+static void add_poly_filled(UIState *ui, vec2 *vertices, u32 num_vertices, u32 color)
+{
+    u32 start_vertice_index = ui->num_vertices;
+    u32 num_elements = (num_vertices - 2) * 3;
+
+    assert(ui->num_vertices + num_vertices < MAX_NUM_VERTICES);
+    assert(ui->num_elements + num_elements < MAX_NUM_ELEMENTS);
+
+    for (u32 vertex_index = 0; vertex_index < num_vertices; ++vertex_index)
+    {
+        Vertex *vertex = ui->vertices + ui->num_vertices++;
+        vertex->pos.x = vertices[vertex_index].x;
+        vertex->pos.y = vertices[vertex_index].y;
+        vertex->uv = ui->default_font.white_pixel_uv;
+        vertex->color = color;
+    }
+
+    for (u32 element_index = 2; element_index < num_vertices; ++element_index)
+    {
+        GLuint *element = ui->elements + ui->num_elements;
+        element[0] = start_vertice_index;
+        element[1] = start_vertice_index + element_index - 1;
+        element[2] = start_vertice_index + element_index;
+
+        ui->num_elements += 3;
+    }
+}
+
+static void add_rect_outline(UIState *ui, vec2 top_left_corner, vec2 bottom_right_corner, u32 color)
+{
+    vec2 vertices[] =
+    {
+        v2(top_left_corner.x, top_left_corner.y),
+        v2(top_left_corner.x, bottom_right_corner.y),
+        v2(bottom_right_corner.x, bottom_right_corner.y),
+        v2(bottom_right_corner.x, top_left_corner.y),
+    };
+    add_poly_outline(ui, vertices, array_count(vertices), color, 1.0f, true);
+}
+
+static void add_rect_filled(UIState *ui, vec2 top_left_corner, vec2 bottom_right_corner, u32 color)
+{
+    vec2 vertices[] =
+    {
+        v2(top_left_corner.x,     top_left_corner.y),
+        v2(top_left_corner.x,     bottom_right_corner.y),
+        v2(bottom_right_corner.x, bottom_right_corner.y),
+        v2(bottom_right_corner.x, top_left_corner.y),
+    };
+    add_poly_filled(ui, vertices, array_count(vertices), color);
+}
+
+static void add_arc_filled(UIState *ui, vec2 center, f32 radius, u32 color, f32 start_angle, f32 end_angle, u32 num_segments)
+{
+    TempMemoryStack temp_memory = begin_temp_memory(&ui->memory);
+    {
+        vec2 *vertices = push_array(&ui->memory, num_segments + 1, vec2);
+
+        f32 angle_step = (end_angle - start_angle) / num_segments;
+        for (u32 vertex_index = 0; vertex_index <= num_segments; ++vertex_index)
+        {
+            f32 angle = start_angle + (f32)vertex_index * angle_step;
+
+            vertices[vertex_index].x = center.x + cos32(angle) * radius;
+            vertices[vertex_index].y = center.y - sin32(angle) * radius;
+        }
+
+        add_poly_filled(ui, vertices, num_segments + 1, color);
+    }
+    end_temp_memory(temp_memory);
+}
+
+inline void add_circle_filled(UIState *ui, vec2 center, f32 radius, u32 color)
+{
+    add_arc_filled(ui, center, radius, color, 0.0f, TAU32, 24);
+}
+
+static u32 read_unicode(u8 **utf8_bytes_start, u8 *utf8_bytes_end, u32 default_unicode = 0)
+{
+    // NOTE(dan): to get the unicode: extract x-es and glue them together
+    // 0x00000 - 0x00007F:  0xxx xxxx                                      // ascii
+    // 0x00080 - 0x0007FF:  110x xxxx  10xx xxxx                           // 1100 0000 == 0xC0
+    // 0x00800 - 0x07FFFF:  1110 xxxx  10xx xxxx  10xx xxxx                // 1110 0000 == 0xE0
+    // 0x10000 - 0x1FFFFF:  1111 0xxx  10xx xxxx  10xx xxxx  10xx xxxx     // 1111 0000 == 0xF0
+    u32 unicode = default_unicode;
+    u32 num_bytes_read = 0;
+
+    u8 *c = *utf8_bytes_start;
+    if (*c < 0x80) // NOTE(dan): 1 byte - ascii
+    {
+        unicode = *c;
+        num_bytes_read = 1;
+    }
+    else if ((*c & 0xE0) == 0xC0) // NOTE(dan): 2 bytes
+    {
+        if (c + 1 < utf8_bytes_end)
+        {
+            u8 byte_0_bits = c[0] & 0x1F;
+            u8 byte_1_bits = c[1] & 0x3F;
+
+            unicode = (byte_0_bits << 6) | byte_1_bits;
+        }
+        num_bytes_read = 2;
+    }
+    else if ((*c & 0xF0) == 0xE0) // NOTE(dan): 3 bytes
+    {
+        if (c + 2 < utf8_bytes_end)
+        {
+            u8 byte_0_bits = c[0] & 0x0F;
+            u8 byte_1_bits = c[1] & 0x3F;
+            u8 byte_2_bits = c[2] & 0x3F;
+
+            unicode = (byte_0_bits << 12) | (byte_1_bits << 6) | byte_2_bits;
+        }
+        num_bytes_read = 3;
+    }
+    else // NOTE(dan): 4 bytes
+    {
+        assert((*c & 0xF8) == 0xF0);
+        if (c + 3 < utf8_bytes_end)
+        {
+            u8 byte_0_bits = c[0] & 0x07;
+            u8 byte_1_bits = c[1] & 0x3F;
+            u8 byte_2_bits = c[2] & 0x3F;
+            u8 byte_3_bits = c[3] & 0x3F;
+
+            unicode = (byte_0_bits << 18) | (byte_1_bits << 12) | (byte_2_bits << 6) | byte_3_bits;
+        }
+        num_bytes_read = 4;
+    }
+
+    *utf8_bytes_start += num_bytes_read;
+    return unicode;
+}
+
+static vec2 calc_text_size(UIState *ui, char *text, f32 size)
+{
+    Font *font = &ui->default_font;
+    char *at = text;
+    char *end = text + string_length(text);
+    vec2 at_pos = v2(0, 0);
+    f32 scale = size / font->size;
+
+    while (at < end)
+    {
+        u32 unicode = read_unicode((u8 **)&at, (u8 *)end);
+        if (!unicode)
+        {
+            break;
+        }
+
+        // TODO(dan): 0xFF -> max unicode codepoint
+        unichar c = (unichar)unicode;
+        if (c < 0xFF)
+        {
+            u16 glyph_index = font->glyph_index_lut[c];
+            Glyph *glyph = font->glyphs + glyph_index;
+
+            // TODO(dan): wordwrap, clip
+            at_pos.x += scale * glyph->advance_x;
+        }
+    }
+
+    // TODO(dan): calc when we have wordwrap
+    at_pos.y = size;
+
+    return at_pos;
+}
+
+static vec2 add_text(UIState *ui, char *text, vec2 pos, f32 size, u32 color)
+{
+    Font *font = &ui->default_font;
+    char *at = text;
+    char *end = text + string_length(text);
+    vec2 at_pos = pos;
+    f32 scale = size / font->size;
+
+    while (at < end)
+    {
+        u32 unicode = read_unicode((u8 **)&at, (u8 *)end);
+        if (!unicode)
+        {
+            break;
+        }
+
+        // TODO(dan): 0xFF -> max unicode codepoint
+        unichar c = (unichar)unicode;
+        if (c < 0xFF)
+        {
+            u16 glyph_index = font->glyph_index_lut[c];
+            Glyph *glyph = font->glyphs + glyph_index;
+
+            vec2 top_left_corner     = vec2_add(at_pos, vec2_mul(scale, glyph->min_pos));
+            vec2 bottom_right_corner = vec2_add(at_pos, vec2_mul(scale, glyph->max_pos));
+
+            add_textured_quad(ui, top_left_corner, bottom_right_corner, glyph->min_uv, glyph->max_uv, color);
+
+            // TODO(dan): wordwrap, clip
+            at_pos.x += scale * glyph->advance_x;
+        }
+    }
+
+    // TODO(dan): calc when we have wordwrap
+    at_pos.y = size;
+
+    vec2 text_size = vec2_sub(at_pos, pos);
+    return text_size;
+}
+
 inline u32 stb_decompress_length(u8 *input);
 static u32 stb_decompress(u8 *output, u8 *i, u32 length);
 
@@ -33,6 +389,7 @@ inline u32 upper_pow2(u32 value)
 
 static void init_default_ui_texture(UIState *ui)
 {
+    // TODO(dan): replace this font, it does not have extended latin chars
     unichar glyph_ranges[] =
     {
         0x0020, 0x00FF,
@@ -47,6 +404,7 @@ static void init_default_ui_texture(UIState *ui)
     font->texture_height = 0;
     font->white_pixel_uv = v2(0, 0);
 
+    // TODO(dan): do we want to free this
     // TempMemoryStack temp_memory = begin_temp_memory(&font_state->font_memory);
     {
         u32 decoded_font_size = ((string_length(default_font) + 4) / 5) * 4;
@@ -174,9 +532,8 @@ static void init_default_ui_texture(UIState *ui)
                     glyph->min_uv = v2(quad.s0, quad.t0);
                     glyph->max_uv = v2(quad.s1, quad.t1);
 
-                    f32 translate_y = (f32)(i32)(font->ascent);
-                    glyph->min_pos.y += translate_y;
-                    glyph->max_pos.y += translate_y;
+                    glyph->min_pos.y += font->ascent;
+                    glyph->max_pos.y += font->ascent;
                 }
             }
         }

@@ -1,3 +1,39 @@
+static char *ui_vertex_shader = R"GLSL(
+    #version 330
+
+    uniform mat4 proj_mat;
+
+    in vec2 pos;
+    in vec2 uv;
+    in vec4 color;
+
+    out vec2 frag_uv;
+    out vec4 frag_color;
+
+    void main()
+    {
+        frag_uv = uv;
+        frag_color = color;
+        gl_Position = proj_mat * vec4(pos.xy, 0.0f, 1.0f);
+    }
+)GLSL";
+
+static char *ui_fragment_shader = R"GLSL(
+    #version 330
+
+    uniform sampler2D tex;
+
+    in vec2 frag_uv;
+    in vec4 frag_color;
+    
+    out vec4 out_color;
+
+    void main()
+    {
+        out_color = frag_color * texture(tex, frag_uv);
+    }
+)GLSL";
+
 #define DEFAULT_TEXTURE_WIDTH   90
 #define DEFAULT_TEXTURE_HEIGHT  27
 

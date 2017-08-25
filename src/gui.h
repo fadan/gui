@@ -298,12 +298,23 @@ struct Font
     u16 glyph_index_lut[256];
 };
 
+struct DrawContext
+{
+    vec2 min_pos;
+    vec2 max_pos;
+    vec2 at;
+};
+
 struct UIState
 {
     PlatformInput *input;
 
     MemoryStack memory;
     MemoryStack font_memory;
+
+    u32 num_draw_contexts;
+    DrawContext draw_contexts[32];
+    DrawContext *draw_context;
 
     Font default_font;
 
