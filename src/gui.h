@@ -367,6 +367,7 @@ struct Panel
     char name[32];
     char location[16];
 
+    // TODO(dan): maybe store min_pos and max_pos instead?
     vec2 pos;
     vec2 size;
 

@@ -188,6 +188,70 @@ static Panel *get_root_panel(UIState *ui)
     return root_panel;
 }
 
+static void undock_panel(UIState *ui, Panel *panel)
+{
+    if (panel->prev_panel)
+    {
+        set_panel_active(panel->prev_panel);
+    }
+    else if (panel->next_panel)
+    {
+        set_panel_active(panel->next_panel);
+    }
+    else
+    {
+        panel->active = true;
+    }
+
+    Panel *container = panel->parent;
+    if (container)
+    {
+        // TODO(dan): remove from container
+    }
+
+    if (panel->prev_panel)
+    {
+        panel->prev_panel->next_panel = panel->next_panel;
+    }
+    if (panel->next_panel)
+    {
+        panel->next_panel->prev_panel = panel->prev_panel;
+    }
+
+    panel->parent = 0;
+    panel->next_panel = 0;
+    panel->prev_panel = 0;
+}
+
+inline b32 is_panel_container(Panel *panel)
+{
+    b32 is_container = (panel->children[0] != 0);
+    return is_container;
+}
+
+static Panel *get_panel_at_mouse(UIState *ui)
+{
+    Panel *panel = 0;
+    for (Panel *test_panel = ui->first_panel; test_panel; test_panel = test_panel->next)
+    {
+        if (!is_panel_container(test_panel) && (test_panel->status == PanelStatus_Docked))
+        {
+            if (mouse_intersect_rect(ui, test_panel->pos, vec2_add(test_panel->pos, test_panel->size)))
+            {
+                panel = test_panel;
+                break;
+            }
+        }
+    }
+    return panel;
+}
+
+static b32 dock_panel_to_container(UIState *ui, Panel *panel, Panel *container, vec2 min_pos, vec2 max_pos, b32 on_border)
+{
+    b32 docked = false;
+    return docked;
+}
+
 static b32 begin_panel(UIState *ui, char *name, b32 *opened)
 {
     Panel *panel = get_or_create_panel(ui, name, !opened || *opened);
@@ -218,7 +282,7 @@ static b32 begin_panel(UIState *ui, char *name, b32 *opened)
 
             if (!root_panel)
             {
-                dc->min_pos = v2(0.0f, 0.0f);
+                dc->min_pos = v2(0.0f, 30.0f);
                 dc->max_pos = ui_size;
             }
             else
@@ -237,7 +301,43 @@ static b32 begin_panel(UIState *ui, char *name, b32 *opened)
 
         ui->current_panel = panel;
 
-        // TODO(dan): handle drag if we are dragged
+        if (panel->status == PanelStatus_Dragged)
+        {
+            DrawContext *dc = push_draw_context(ui);
+            {
+                panel->pos = v2(ui->input->mouse_pos[0] - ui->panel_drag_offset.x, ui->input->mouse_pos[1] - ui->panel_drag_offset.y);
+
+                Panel *container = get_panel_at_mouse(ui);
+                if (container)
+                {
+                    // TODO(dan): dock into container
+                    vec2 min_pos = container->pos;
+                    vec2 max_pos = vec2_add(container->pos, container->size);
+
+                    dock_panel_to_container(ui, panel, container, min_pos, max_pos, false);
+                }
+                else
+                {
+                    // TODO(dan): fullscreen panel without the menubar, storage for this?
+                    vec2 min_pos = v2(0.0f, 25.0f);
+                    vec2 max_pos = get_ui_size(ui);
+
+                    if (!dock_panel_to_container(ui, panel, container, min_pos, max_pos, true))
+                    {
+                        add_rect_filled(ui, panel->pos, vec2_add(panel->pos, panel->size), 0x80FFFFFF);
+
+                        if (!ui->input->mouse_buttons[mouse_button_left].down)
+                        {
+                            panel->status = PanelStatus_Float;
+                            panel->location[0] = 0;
+
+                            set_panel_active(panel);
+                        }
+                    }
+                }
+            }
+            pop_draw_context(ui);
+        }
 
         if (panel->status == PanelStatus_Float)
         {
@@ -246,7 +346,15 @@ static b32 begin_panel(UIState *ui, char *name, b32 *opened)
             dc->max_pos = vec2_add(dc->min_pos, panel->size);
 
             ui->panel_end_action = PanelEndAction_End;
-            // TODO(dan): handle drag & undock
+
+            if (mouse_intersect_rect(ui, dc->min_pos, dc->max_pos) && ui->input->mouse_buttons[mouse_button_left].down)
+            {
+                ui->panel_drag_offset = v2(ui->input->mouse_pos[0] - panel->pos.x, ui->input->mouse_pos[1] - panel->pos.y);
+
+                undock_panel(ui, panel);
+
+                panel->status = PanelStatus_Dragged;
+            }
             result = true;
         }
     }
@@ -259,6 +367,8 @@ static void end_panel(UIState *ui)
     {
         pop_draw_context(ui);
     }
+
+    ui->current_panel = 0;
 
     if (ui->panel_end_action > PanelEndAction_None)
     {
