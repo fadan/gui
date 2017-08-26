@@ -129,6 +129,7 @@ static void render_ui(UIState *ui, i32 display_width, i32 display_height)
 
     ui->num_elements = 0;
     ui->num_vertices = 0;
+    ++ui->frame_index;
 }
 
 static UPDATE_AND_RENDER(update_and_render)
@@ -153,9 +154,8 @@ static UPDATE_AND_RENDER(update_and_render)
     gl.Clear(GL_COLOR_BUFFER_BIT);
 
     UIState *ui = &app_state->ui_state;
+    clear_ui(ui, (f32)window_width, (f32)window_height);
     {
-        clear_ui(ui, (f32)window_width, (f32)window_height);
-
         // NOTE(dan): background
         {
             u32 top_left_color     = 0xFFae323f;
@@ -167,13 +167,21 @@ static UPDATE_AND_RENDER(update_and_render)
 
         // NOTE(dan): menu bar
         {
-            vec2 bar_size = v2((f32)window_width, 30.0f);
-            begin_menu_bar(ui, bar_size);
+            begin_menu_bar(ui, 25.0f);
             {
-                menu_button(ui, "File");
-                menu_button(ui, "View");
+                menu_bar_button(ui, "File");
+                menu_bar_button(ui, "View");
             }
             end_menu_bar(ui);
+        }
+
+        {
+            static b32 open = true;
+            begin_panel(ui, "Test", &open);
+            {
+
+            }
+            end_panel(ui);
         }
     }
     render_ui(ui, window_width, window_height);

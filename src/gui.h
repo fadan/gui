@@ -30,6 +30,11 @@ static void set_memory(void *memory, char set_byte, u64 num_bytes)
     u8 *aligned_ptr = (u8 *)((u64)byte_ptr & (u64)-8);
     u32 num_misaligned_bytes = (u32)(byte_ptr - aligned_ptr);
 
+    if (num_misaligned_bytes > (u32)num_bytes)
+    {
+        num_misaligned_bytes = (u32)num_bytes;
+    }
+
     for (u32 byte_index = 0; byte_index < num_misaligned_bytes; ++byte_index)
     {
         *byte_ptr++ = set_byte;
@@ -247,6 +252,27 @@ inline u32 string_length(char *string)
     return length;
 }
 
+inline void copy_string_and_null_terminate(char *src, char *dest, u32 dest_size)
+{
+    u32 dest_length = 0;
+    while (*src && dest_length++ < dest_size)
+    {
+        *dest++ = *src++;
+    }
+    *dest++ = 0;
+}
+
+static u32 djb2_hash(char *string)
+{
+    u32 hash = 5381;
+    for (char *at = string; *at; ++at)
+    {
+        hash = ((hash << 5) + hash) + *at;
+    }
+    return hash;
+}
+
+
 enum
 {
     attrib_pos,
@@ -305,6 +331,53 @@ struct DrawContext
     vec2 at;
 };
 
+enum PanelStatus
+{
+    PanelStatus_Docked,
+
+    PanelStatus_Float,
+    PanelStatus_Dragged,
+};
+
+enum PanelEndAction
+{
+    PanelEndAction_None,
+
+    PanelEndAction_Panel,
+    PanelEndAction_End,
+    PanelEndAction_EndChild,
+};
+
+struct Panel
+{
+    Panel *parent;
+    Panel *next_panel;
+    Panel *prev_panel;
+    Panel *children[2];
+
+    union
+    {
+        Panel *next;
+        Panel *next_free;
+    };
+
+    u32 id;
+    PanelStatus status;
+    
+    char name[32];
+    char location[16];
+
+    vec2 pos;
+    vec2 size;
+
+    b32 active;
+    b32 opened;
+    b32 is_first;
+
+    u32 last_frame;
+    u32 invalid_frames;
+};
+
 struct UIState
 {
     PlatformInput *input;
@@ -315,6 +388,17 @@ struct UIState
     u32 num_draw_contexts;
     DrawContext draw_contexts[32];
     DrawContext *draw_context;
+
+    u32 frame_index;
+
+    // TODO(dan): remove last_frame?
+    u32 last_frame;
+    vec2 panel_drag_offset;
+    PanelEndAction panel_end_action;
+
+    Panel *current_panel;
+    Panel *first_panel;
+    Panel *first_free_panel;
 
     Font default_font;
 
