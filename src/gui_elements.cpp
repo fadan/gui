@@ -246,9 +246,242 @@ static Panel *get_panel_at_mouse(UIState *ui)
     return panel;
 }
 
+static void set_panel_children_pos_and_size(Panel *panel, vec2 pos, vec2 size);
+
+static void set_panel_pos_and_size(Panel *panel, vec2 pos, vec2 size)
+{
+    panel->pos = pos;
+    panel->size = size;
+
+    for (Panel *prev_panel = panel->prev_panel; prev_panel; prev_panel = prev_panel->prev_panel)
+    {
+        prev_panel->pos = pos;
+        prev_panel->size = size;
+    }
+    for (Panel *next_panel = panel->next_panel; next_panel; next_panel = next_panel->next_panel)
+    {
+        next_panel->pos = pos;
+        next_panel->size = size;
+    }
+
+    if (is_panel_container(panel))
+    {
+        set_panel_children_pos_and_size(panel, pos, size);
+    }
+}
+
+inline b32 is_panel_horizontal(Panel *panel)
+{
+    b32 is_horizontal = (panel->children[0]->pos.x <panel->children[1]->pos.x);
+    return is_horizontal;
+}
+
+inline vec2 get_panel_min_size(Panel *panel)
+{
+    // TODO(dan): get line height + spacing
+    vec2 min_size = v2(16.0f, 16.0f + 13.0f);
+    if (panel->children[0])
+    {
+        vec2 child_0_size = get_panel_min_size(panel->children[0]);
+        vec2 child_1_size = get_panel_min_size(panel->children[1]);
+
+        if (is_panel_horizontal(panel))
+        {
+            min_size = v2(child_0_size.x + child_1_size.x, max(child_0_size.y, child_1_size.y));
+        }
+        else
+        {
+            min_size = v2(max(child_0_size.x, child_1_size.x), child_0_size.y + child_1_size.y);
+        }
+    }
+    return min_size;
+}
+
+static void set_panel_children_pos_and_size(Panel *panel, vec2 pos, vec2 size)
+{
+    vec2 children_size = panel->children[0]->size;
+
+    // TODO(dan): pull out children min sizes
+    if (is_panel_horizontal(panel))
+    {
+        children_size.x = (f32)((i32)(size.x * panel->children[0]->size.x / (panel->children[0]->size.x + panel->children[1]->size.x)));
+        children_size.y = size.y;
+
+        if (children_size.x < get_panel_min_size(panel->children[0]).x)
+        {
+            children_size.x = get_panel_min_size(panel->children[0]).x;
+        }
+        else if ((size.x - children_size.x) < get_panel_min_size(panel->children[1]).x)
+        {
+            children_size.x = size.x - get_panel_min_size(panel->children[1]).x;
+        }
+
+        set_panel_pos_and_size(panel->children[0], pos, children_size);
+
+        vec2 children_pos = pos;
+        children_size.x = size.x - panel->children[0]->size.x;
+        children_pos.x += panel->children[0]->size.x;
+
+        set_panel_pos_and_size(panel->children[1], children_pos, children_size);
+    }
+    else
+    {
+        children_size.x = size.x;
+        children_size.y = (f32)((i32)(size.y * panel->children[0]->size.y / (panel->children[0]->size.y + panel->children[1]->size.y)));
+
+        if (children_size.y < get_panel_min_size(panel->children[0]).y)
+        {
+            children_size.y = get_panel_min_size(panel->children[0]).y;
+        }
+        else if ((size.y - children_size.y) < get_panel_min_size(panel->children[1]).y)
+        {
+            children_size.y = size.y - get_panel_min_size(panel->children[1]).y;
+        }
+
+        set_panel_pos_and_size(panel->children[0], pos, children_size);
+
+        vec2 children_pos = pos;
+        children_size.y = size.y - panel->children[0]->size.y;
+        children_pos.y += panel->children[0]->size.y;
+
+        set_panel_pos_and_size(panel->children[1], children_pos, children_size);
+    }
+}
+
+static void dock_panel(UIState *ui, Panel *panel, Panel *container, PanelSlot slot)
+{
+    assert(!panel->parent);
+
+    if (!container)
+    {
+        // NOTE(dan): full screen panel
+        panel->status = PanelStatus_Docked;
+
+        vec2 pos = v2(0.0f, 0.0f);
+        vec2 ui_size = get_ui_size(ui);
+        set_panel_pos_and_size(panel, pos, ui_size);
+    }
+
+    set_panel_active(panel);
+}
+
 static b32 dock_panel_to_container(UIState *ui, Panel *panel, Panel *container, vec2 min_pos, vec2 max_pos, b32 on_border)
 {
+    vec2 size = vec2_sub(max_pos, min_pos);
+    vec2 center = vec2_add(min_pos, vec2_mul(0.5f, size));
+
     b32 docked = false;
+    for (i32 slot_index = 0; slot_index < (on_border ? 4 : 5); ++slot_index)
+    {
+        vec2 rect_min_pos = v2(0.0f, 0.0f);
+        vec2 rect_max_pos = v2(0.0f, 0.0f);
+
+        if (on_border)
+        {
+            switch ((PanelSlot)slot_index)
+            {
+                case PanelSlot_Top:
+                {
+                    rect_min_pos = v2(center.x - 20.0f, min_pos.y + 10.0f);
+                    rect_max_pos = v2(center.x + 20.0f, min_pos.y + 30.0f);
+                } break;
+                case PanelSlot_Left:
+                {
+                    rect_min_pos = v2(min_pos.x + 10.0f, center.y - 20.0f);
+                    rect_max_pos = v2(min_pos.x + 30.0f, center.y + 20.0f);
+                } break;
+                case PanelSlot_Bottom:
+                {
+                    rect_min_pos = v2(center.x - 20.0f, max_pos.y - 30.0f);
+                    rect_max_pos = v2(center.x + 20.0f, max_pos.y - 10.0f);
+                } break;
+                case PanelSlot_Right:
+                {
+                    rect_min_pos = v2(max_pos.x - 30.0f, center.y - 20.0f);
+                    rect_max_pos = v2(max_pos.x - 10.0f, center.y + 20.0f);
+                } break;
+                invalid_default_case;
+            }
+        }
+        else
+        {
+            switch ((PanelSlot)slot_index)
+            {
+                case PanelSlot_Top:
+                {
+                    rect_min_pos = vec2_add(center, v2(-20.0f, -50.0f));
+                    rect_max_pos = vec2_add(center, v2( 20.0f, -30.0f));
+                } break;
+                case PanelSlot_Left:
+                {
+                    rect_min_pos = vec2_add(center, v2(-50.0f, -20.0f));
+                    rect_max_pos = vec2_add(center, v2(-30.0f,  20.0f));
+                } break;
+                case PanelSlot_Bottom:
+                {
+                    rect_min_pos = vec2_add(center, v2(-20.0f, 30.0f));
+                    rect_max_pos = vec2_add(center, v2( 20.0f, 50.0f));
+                } break;
+                case PanelSlot_Right:
+                {
+                    rect_min_pos = vec2_add(center, v2(30.0f, -20.0f));
+                    rect_max_pos = vec2_add(center, v2(50.0f,  20.0f));
+                } break;
+                default:
+                {
+                    rect_min_pos = vec2_sub(center, v2(20.0f, 20.0f));
+                    rect_max_pos = vec2_add(center, v2(20.0f, 20.0f));
+                }
+            }
+        }
+
+        b32 hovered = mouse_intersect_rect(ui, rect_min_pos, rect_max_pos);
+        u32 color = (hovered) ? 0xFFfc8d45 : 0xFFfc7825;
+        add_rect_filled(ui, rect_min_pos, rect_max_pos, color);
+
+        if (hovered)
+        {
+            if (!ui->input->mouse_buttons[mouse_button_left].down)
+            {
+                Panel *to = container ? container : get_root_panel(ui);
+                dock_panel(ui, panel, to, (PanelSlot)slot_index);
+
+                docked = true;
+                break;
+            }
+
+            vec2 dock_min_pos = v2(0.0f, 0.0f);
+            vec2 dock_max_pos = v2(0.0f, 0.0f);
+            vec2 half_size = vec2_mul(0.5f, vec2_sub(max_pos, min_pos));
+
+            switch ((PanelSlot)slot_index)
+            {
+                case PanelSlot_Top:
+                {
+                    dock_min_pos = min_pos;
+                    dock_max_pos = vec2_add(min_pos, v2(max_pos.x, half_size.y));
+                } break;
+                case PanelSlot_Left:
+                {
+                    dock_min_pos = min_pos;
+                    dock_max_pos = vec2_add(min_pos, v2(half_size.x, max_pos.y));
+                } break;
+                case PanelSlot_Bottom:
+                {
+                    dock_min_pos = vec2_add(min_pos, v2(0, half_size.y));
+                    dock_max_pos = max_pos;
+                } break;
+                case PanelSlot_Right:
+                {
+                    dock_min_pos = vec2_add(min_pos, v2(half_size.x, 0));
+                    dock_max_pos = max_pos;
+                } break;
+            }
+
+            add_rect_filled(ui, dock_min_pos, dock_max_pos, 0xFFfb7926);
+        }
+
+    }
     return docked;
 }
 

@@ -331,6 +331,18 @@ struct DrawContext
     vec2 at;
 };
 
+enum PanelSlot
+{
+    PanelSlot_Left,
+    PanelSlot_Right,
+    PanelSlot_Top,
+    PanelSlot_Bottom,
+    PanelSlot_Tab,
+
+    PanelSlot_Float,
+    PanelSlot_None,
+};
+
 enum PanelStatus
 {
     PanelStatus_Docked,
