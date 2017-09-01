@@ -1,3 +1,8 @@
+static void set_default_colors(UIState *ui)
+{
+    ui->colors[UIColor_Text] = 0xFF0A0A0A;
+}
+
 static char *ui_vertex_shader = R"GLSL(
     #version 330
 

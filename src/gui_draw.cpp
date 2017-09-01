@@ -34,25 +34,26 @@ static void add_poly_outline(UIState *ui, vec2 *points, u32 point_count, u32 col
 
         Vertex *vertex = ui->vertices + vertice_index;
         GLuint *element = ui->elements + element_index;
+        vec2 uv = ui->current_font.white_pixel_uv;
 
         vertex[0].pos.x = current_pos.x + delta_pos.y;
         vertex[0].pos.y = current_pos.y - delta_pos.x;
-        vertex[0].uv = ui->default_font.white_pixel_uv;
+        vertex[0].uv = uv;
         vertex[0].color = color;
 
         vertex[1].pos.x = next_pos.x + delta_pos.y;
         vertex[1].pos.y = next_pos.y - delta_pos.x;
-        vertex[1].uv = ui->default_font.white_pixel_uv;
+        vertex[1].uv = uv;
         vertex[1].color = color;
 
         vertex[2].pos.x = next_pos.x - delta_pos.y;
         vertex[2].pos.y = next_pos.y + delta_pos.x;
-        vertex[2].uv = ui->default_font.white_pixel_uv;
+        vertex[2].uv = uv;
         vertex[2].color = color;
 
         vertex[3].pos.x = current_pos.x - delta_pos.y;
         vertex[3].pos.y = current_pos.y + delta_pos.x;
-        vertex[3].uv = ui->default_font.white_pixel_uv;
+        vertex[3].uv = uv;
         vertex[3].color = color;
 
         element[0] = vertice_index + 0;
@@ -110,7 +111,7 @@ static void add_color_quad(UIState *ui, vec2 top_left_corner, vec2 bottom_right_
                            u32 bottom_left_color, u32 bottom_right_color)
 {
     u32 vertice_index = ui->num_vertices;
-    vec2 uv = ui->default_font.white_pixel_uv;
+    vec2 uv = ui->current_font.white_pixel_uv;
 
     assert(ui->num_vertices + 4 < MAX_NUM_VERTICES);
     assert(ui->num_elements + 6 < MAX_NUM_ELEMENTS);
@@ -158,7 +159,7 @@ static void add_poly_filled(UIState *ui, vec2 *vertices, u32 num_vertices, u32 c
         Vertex *vertex = ui->vertices + ui->num_vertices++;
         vertex->pos.x = vertices[vertex_index].x;
         vertex->pos.y = vertices[vertex_index].y;
-        vertex->uv = ui->default_font.white_pixel_uv;
+        vertex->uv = ui->current_font.white_pixel_uv;
         vertex->color = color;
     }
 
@@ -282,7 +283,7 @@ static u32 read_unicode(u8 **utf8_bytes_start, u8 *utf8_bytes_end, u32 default_u
 
 static vec2 calc_text_size(UIState *ui, char *text, f32 size)
 {
-    Font *font = &ui->default_font;
+    Font *font = &ui->current_font;
     char *at = text;
     char *end = text + string_length(text);
     vec2 at_pos = v2(0, 0);
@@ -316,7 +317,7 @@ static vec2 calc_text_size(UIState *ui, char *text, f32 size)
 
 static vec2 add_text(UIState *ui, char *text, vec2 pos, f32 size, u32 color)
 {
-    Font *font = &ui->default_font;
+    Font *font = &ui->current_font;
     char *at = text;
     char *end = text + string_length(text);
     vec2 at_pos = pos;
@@ -348,7 +349,7 @@ static vec2 add_text(UIState *ui, char *text, vec2 pos, f32 size, u32 color)
     }
 
     // TODO(dan): calc when we have wordwrap
-    at_pos.y = size;
+    at_pos.y += size;
 
     vec2 text_size = vec2_sub(at_pos, pos);
     return text_size;
@@ -398,7 +399,7 @@ static void init_default_ui_texture(UIState *ui)
     char *default_font = get_default_font();
     char *default_texture = get_default_texture();
 
-    Font *font = &ui->default_font;
+    Font *font = &ui->current_font;
     font->size = 13.0f;
     font->texture_width = 256;
     font->texture_height = 0;

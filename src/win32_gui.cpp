@@ -354,7 +354,7 @@ static PLATFORM_ALLOCATE(win32_allocate)
     begin_mutex(&win32_state->memory_mutex);
     block->prev = sentinel->prev;
     block->prev->next = block;
-    block->prev->prev = block;
+    block->next->prev = block;
     end_mutex(&win32_state->memory_mutex);
 
     PlatformMemoryBlock *memblock = &block->memblock;

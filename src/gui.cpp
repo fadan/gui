@@ -1,25 +1,5 @@
 #include "gui.h"
 
-#define STBTT_ifloor        floor32
-#define STBTT_iceil         ceil32
-#define STBTT_sqrt          sqrt32
-#define STBTT_pow           pow32
-#define STBTT_cos           cos32
-#define STBTT_acos          acos32
-#define STBTT_fabs          abs32
-#define STBTT_fmod          mod32
-#define STBTT_malloc(x, u)  platform.virtual_alloc(x)
-#define STBTT_free(x, u)    platform.virtual_free(x)
-#define STBTT_assert        assert
-#define STBTT_strlen        string_length
-#define STBTT_memcpy        copy_memory
-#define STBTT_memset        set_memory
-
-#define NULL 0
-#define STBTT_STATIC
-#define STB_TRUETYPE_IMPLEMENTATION
-#include "stb_truetype.h"
-
 #define MAX_NUM_VERTICES 1024
 #define MAX_NUM_ELEMENTS 1024
 
@@ -82,8 +62,9 @@ static void init_ui(UIState *ui, PlatformInput *input)
 
     init_memory_stack(&ui->font_memory, 1*MB);
     init_default_ui_texture(ui);
+    set_default_colors(ui);
 
-    Font *font = &ui->default_font;
+    Font *font = &ui->current_font;
 
     gl.GenTextures(1, &ui->texture);
     gl.BindTexture(GL_TEXTURE_2D, ui->texture);
@@ -129,7 +110,35 @@ static void render_ui(UIState *ui, i32 display_width, i32 display_height)
 
     ui->num_elements = 0;
     ui->num_vertices = 0;
-    ++ui->frame_index;
+}
+
+#include "format_string.h"
+
+inline void push_ui_newline(UIState *ui)
+{
+    DrawContext *dc = ui->draw_context;
+    dc->at.x = dc->min_pos.x;
+    dc->at.y += dc->current_line_height;
+}
+
+inline void push_ui_text(UIState *ui, char *text)
+{
+    DrawContext *dc = ui->draw_context;
+    vec2 pos = dc->at;
+    f32 font_size = ui->current_font.size;
+    u32 color = ui->colors[UIColor_Text];
+
+    vec2 text_size = add_text(ui, text, pos, font_size, color);
+    dc->at.x += text_size.x;
+    dc->current_line_height = max(dc->current_line_height, text_size.y);
+}
+
+inline void push_ui_textf(UIState *ui, char *format, ...)
+{
+    char text_buffer[255];
+    param_list params = get_params_after(format);
+    format_string(text_buffer, sizeof(text_buffer), format, params);
+    push_ui_text(ui, text_buffer);
 }
 
 static UPDATE_AND_RENDER(update_and_render)
@@ -175,14 +184,15 @@ static UPDATE_AND_RENDER(update_and_render)
             end_menu_bar(ui);
         }
 
+        begin_panels(ui);
         {
-            static b32 open = true;
-            begin_panel(ui, "Test", &open);
+            begin_panel(ui, "Info", v2(300, 400));
             {
-
+                push_ui_textf(ui, "Mouse: (% d, %d)", input->mouse_pos[0], input->mouse_pos[1]);
             }
             end_panel(ui);
         }
+        end_panels(ui);
     }
     render_ui(ui, window_width, window_height);
 }
