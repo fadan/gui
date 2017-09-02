@@ -135,7 +135,7 @@ inline void push_ui_text(UIState *ui, char *text)
 
 inline void push_ui_textf(UIState *ui, char *format, ...)
 {
-    char text_buffer[255];
+    char text_buffer[256];
     param_list params = get_params_after(format);
     format_string(text_buffer, sizeof(text_buffer), format, params);
     push_ui_text(ui, text_buffer);
@@ -188,7 +188,11 @@ static UPDATE_AND_RENDER(update_and_render)
         {
             begin_panel(ui, "Info", v2(300, 400));
             {
-                push_ui_textf(ui, "Mouse: (% d, %d)", input->mouse_pos[0], input->mouse_pos[1]);
+                char text_buffer[32];
+                format_string(text_buffer, sizeof(text_buffer), "s: %s d: %d f: %.2f", "string", -10, 12.345);
+                push_ui_text(ui, text_buffer);
+
+                // push_ui_textf(ui, "s: %s d: %d", "string", 10);
             }
             end_panel(ui);
         }
