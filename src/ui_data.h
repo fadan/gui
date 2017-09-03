@@ -1,6 +1,7 @@
 static void set_default_colors(UIState *ui)
 {
     ui->colors[UIColor_Text] = 0xFF0A0A0A;
+    ui->colors[UIColor_PanelBackground] = 0xFFF5F5F5;
 }
 
 static char *ui_vertex_shader = R"GLSL(

@@ -28,7 +28,7 @@ set cplflags=%cplflags% -Oi -Od
 :: -EHa-    : diasble exception handling
 :: -MTd     : put multithreaded debug CRT into .obj
 :: -Z7      : debug info format, put info into .obj
-set cplflags=%cplflags% -fp:fast -Gm- -GR- -EHa- -MTd -Z7
+set cplflags=%cplflags% -fp:fast -Gm- -GR- -EHa- -Z7 -GS- -Gs9999999
 
 :: Misc flags
 :: -nologo : suppress the banner
@@ -50,7 +50,7 @@ set cplflags=%cplflags% -nologo -FC -WX -W4 -wd4100 -wd4201 -wd4505 -wd4189 -wd4
 :: -nologo         : suppress the banner
 :: -incremental:no : disable incremental linking
 :: -opt:ref        : eliminate unreferenced funcs and data
-set linkflags=-nologo -incremental:no -opt:ref
+set linkflags=-nologo -incremental:no -opt:ref -nodefaultlib -stack:0x100000,0x100000 kernel32.lib
 
 ::
 :: Build

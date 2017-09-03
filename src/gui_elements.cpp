@@ -129,7 +129,9 @@ static Panel *get_or_create_panel(UIState *ui, char *name)
         panel->next = ui->first_panel;
         ui->first_panel = panel;
 
+        panel->id = id;
         panel->status = PanelStatus_Float;
+
     }
     return panel;
 }
@@ -146,8 +148,63 @@ static void end_panels(UIState *ui)
 
 static void begin_panel(UIState *ui, char *name, vec2 default_size)
 {
+    Panel *panel = get_or_create_panel(ui, name);
+    DrawContext *dc = push_draw_context(ui);
+
+    if (panel->min_pos.x == panel->max_pos.x && panel->min_pos.y == panel->max_pos.y)
+    {
+        panel->min_pos = ui->panels_dc->min_pos;
+        panel->max_pos = vec2_add(panel->min_pos, default_size);
+
+        ui->active_panel = panel;
+    }
+
+    u32 background_color = ui->colors[UIColor_PanelBackground];
+
+    if (panel == ui->active_panel)
+    {
+        if (panel->status == PanelStatus_Dragged)
+        {
+            vec2 size = vec2_sub(panel->max_pos, panel->min_pos);
+
+            panel->min_pos = v2(ui->input->mouse_pos[0] - ui->drag_offset.x, ui->input->mouse_pos[1] - ui->drag_offset.y);
+            panel->max_pos = vec2_add(panel->min_pos, size);
+
+            if (!ui->input->mouse_buttons[mouse_button_left].down)
+            {
+                panel->status = PanelStatus_Float;
+            }
+        }
+    }
+
+    if (mouse_intersect_rect(ui, panel->min_pos, panel->max_pos))
+    {
+        if (ui->input->mouse_buttons[mouse_button_left].down)
+        {
+            ui->active_panel = panel;
+            background_color = (background_color & 0xFFFFFF) | (0x80 << 24);
+            panel->status = PanelStatus_Dragged;
+            ui->drag_offset = v2(ui->input->mouse_pos[0] - panel->min_pos.x, (f32)ui->input->mouse_pos[1] - panel->min_pos.y);
+        }
+    }
+
+    dc->min_pos = panel->min_pos;
+    dc->max_pos = panel->max_pos;
+    dc->at = dc->min_pos;
+
+    vec2 text_size = calc_text_size(ui, name, ui->current_font.size);
+    vec2 padding = v2(10, 5);
+    vec2 text_bb = vec2_add(text_size, vec2_mul(2.0f, padding));
+    vec2 text_pos = vec2_add(panel->min_pos, padding);
+
+    add_rect_filled(ui, panel->min_pos, vec2_add(panel->min_pos, text_bb), 0xFFCCCCCC);
+    add_text(ui, name, text_pos, ui->current_font.size, ui->colors[UIColor_Text]);
+
+    dc->at.y += text_size.y + padding.y * 2;
+    add_rect_filled(ui, dc->at, panel->max_pos, background_color);
 }
 
 static void end_panel(UIState *ui)
 {
+    pop_draw_context(ui);
 }

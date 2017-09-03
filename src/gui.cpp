@@ -1,3 +1,5 @@
+extern "C" int _fltused = 0;
+
 #include "gui.h"
 
 #define MAX_NUM_VERTICES 1024
@@ -114,14 +116,14 @@ static void render_ui(UIState *ui, i32 display_width, i32 display_height)
 
 #include "format_string.h"
 
-inline void push_ui_newline(UIState *ui)
+inline void ui_newline(UIState *ui)
 {
     DrawContext *dc = ui->draw_context;
     dc->at.x = dc->min_pos.x;
     dc->at.y += dc->current_line_height;
 }
 
-inline void push_ui_text(UIState *ui, char *text)
+inline void ui_text(UIState *ui, char *text)
 {
     DrawContext *dc = ui->draw_context;
     vec2 pos = dc->at;
@@ -133,12 +135,32 @@ inline void push_ui_text(UIState *ui, char *text)
     dc->current_line_height = max(dc->current_line_height, text_size.y);
 }
 
-inline void push_ui_textf(UIState *ui, char *format, ...)
+inline void ui_textf(UIState *ui, char *format, ...)
 {
     char text_buffer[256];
     param_list params = get_params_after(format);
-    format_string(text_buffer, sizeof(text_buffer), format, params);
-    push_ui_text(ui, text_buffer);
+    format_string_vararg(text_buffer, sizeof(text_buffer), format, params);
+    ui_text(ui, text_buffer);
+}
+
+inline void change_unit_and_size(char **unit, usize *size)
+{
+    *unit = "B";
+    if (*size > 1024*MB)
+    {
+        *unit = "GB";
+        *size /= GB;
+    }
+    else if (*size > 1024*KB)
+    {
+        *unit = "MB";
+        *size /= MB;
+    }
+    else if (*size > 1024)
+    {
+        *unit = "KB";
+        *size /= KB;
+    }
 }
 
 static UPDATE_AND_RENDER(update_and_render)
@@ -186,13 +208,32 @@ static UPDATE_AND_RENDER(update_and_render)
 
         begin_panels(ui);
         {
-            begin_panel(ui, "Info", v2(300, 400));
+            begin_panel(ui, "Info", v2(300, 200));
             {
-                char text_buffer[32];
-                format_string(text_buffer, sizeof(text_buffer), "s: %s d: %d f: %.2f", "string", -10, 12.345);
-                push_ui_text(ui, text_buffer);
+                PlatformMemoryStats memory_stats = platform.get_memory_stats();
 
-                // push_ui_textf(ui, "s: %s d: %d", "string", 10);
+                char *total_size_unit = "B";
+                usize total_size = memory_stats.total_size;
+                change_unit_and_size(&total_size_unit, &total_size);
+
+                char *total_used_unit = "B";
+                usize total_used = memory_stats.total_used;
+                change_unit_and_size(&total_used_unit, &total_used);
+
+                ui_textf(ui, "Mouse: (%d, %d)", input->mouse_pos[0], input->mouse_pos[1]);
+                ui_newline(ui);
+                ui_textf(ui, "Vertices: %d Elements: %d", ui->num_vertices, ui->num_elements);
+                ui_newline(ui);
+                ui_textf(ui, "Memory blocks: %d Total: %d%s Used: %d%s", 
+                         memory_stats.num_memblocks, total_size, total_size_unit, total_used, total_used_unit);
+                ui_newline(ui);
+                ui_textf(ui, "Frame time: %.3fs", input->dt);
+            }
+            end_panel(ui);
+
+            begin_panel(ui, "Volume Mixer", v2(300, 200));
+            {
+                ui_text(ui, "asdf");
             }
             end_panel(ui);
         }

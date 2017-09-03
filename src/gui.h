@@ -149,12 +149,15 @@ struct Panel
     PanelStatus status;
 
     char name[32];
-    DrawContext *dc;
+
+    vec2 min_pos;
+    vec2 max_pos;
 };
 
 enum UIColors
 {
     UIColor_Text,
+    UIColor_PanelBackground,
 
     UIColor_Count,
 };
@@ -172,10 +175,14 @@ struct UIState
     DrawContext draw_contexts[32];
     DrawContext *draw_context;
 
+    vec2 drag_offset;
+
     DrawContext *panels_dc;
     Panel *root_panel;
     Panel *first_panel;
     Panel *first_free_panel;
+
+    Panel *active_panel;
 
     Font current_font;
 

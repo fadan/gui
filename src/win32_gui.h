@@ -321,6 +321,7 @@ static Win32Api_GUID Win32Api_uuid_IAudioCaptureClient = { 0xC8ADBD64, 0xE71E, 0
     WIN32_API(kernel32, GetFileAttributesExA, int __stdcall, (char *filename, Win32Api_GET_FILEEX_INFO_LEVELS info_level_id, void *file_info)) \
     WIN32_API(kernel32, GetModuleFileNameA, unsigned int __stdcall, (void *module, char *filename, unsigned int size)) \
     WIN32_API(kernel32, GetModuleHandleA, void * __stdcall, (char *module)) \
+    WIN32_API(kernel32, ExitProcess, void __stdcall, (unsigned int)) \
     WIN32_API(kernel32, QueryPerformanceCounter, int __stdcall, (Win32Api_LARGE_INTEGER *perf_count)) \
     WIN32_API(kernel32, QueryPerformanceFrequency, int __stdcall, (Win32Api_LARGE_INTEGER *freq)) \
     WIN32_API(kernel32, SetThreadPriority, int __stdcall, (void *thread, int priority)) \

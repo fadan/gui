@@ -480,3 +480,9 @@ int __stdcall WinMain(HINSTANCE instance, HINSTANCE prev_instance, char *cmd_lin
     
     return 0;
 }
+
+void WinMainCRTStartup()
+{
+    u32 result = WinMain(0, 0, 0, 0);
+    win32_api->ExitProcess(result);
+}

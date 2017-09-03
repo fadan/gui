@@ -23,6 +23,9 @@ struct FormatStringBuffer
     u32 remaining_size;
 };
 
+static char lower_hex_digits[] = "0123456789abcdef";
+static char upper_hex_digits[] = "0123456789ABCDEF";
+
 inline b32 write_char(FormatStringBuffer *buffer, char c)
 {
     b32 continue_parsing = false;
@@ -37,28 +40,6 @@ inline b32 write_char(FormatStringBuffer *buffer, char c)
     }
     return continue_parsing;
 }
-
-inline b32 write_string(FormatStringBuffer *buffer, char *string, u32 length)
-{
-    if (length > buffer->remaining_size)
-    {
-        length = buffer->remaining_size;
-    }
-    copy_memory(buffer->at, string, length);
-
-    buffer->at += length;
-    buffer->remaining_size -= length;
-
-    b32 continue_parsing = false;
-    if (buffer->remaining_size)
-    {
-        continue_parsing = true;
-    }
-    return continue_parsing;
-}
-
-static char lower_hex_digits[] = "0123456789abcdef";
-static char upper_hex_digits[] = "0123456789ABCDEF";
 
 inline void write_u64(FormatStringBuffer *buffer, u64 value, u32 base, char *digits)
 {
@@ -426,8 +407,12 @@ static u32 format_string_vararg(char *buffer, u32 buffer_size, char *format, par
                 case 'X':
                 {
                     u64 value = (flags & FormatStringFlag_MaxSize) ? get_next_param(params, u64) : get_next_param(params, u32);
-                    flags |= FormatStringFlag_LeadingOX;
-                    flags |= ~FormatStringFlag_Leading0x;
+                    
+                    if (flags & FormatStringFlag_Leading0x)
+                    {
+                        flags |= FormatStringFlag_LeadingOX;
+                        flags |= ~FormatStringFlag_Leading0x;
+                    }
 
                     write_u64(&temp_buffer, value, 16, upper_hex_digits);
                     parsing = write_temp_buffer(&out_buffer, &temp_buffer, flags, width, precision);
@@ -468,13 +453,6 @@ static u32 format_string_vararg(char *buffer, u32 buffer_size, char *format, par
                     {
                         precision = string_length(string);
                     }
-
-
-                    // u32 length = string_length(string);
-                    // if (length > (u32)precision)
-                    // {
-                        // length = precision;
-                    // }
 
                     temp_buffer.base = string;
                     temp_buffer.at = string + precision;
