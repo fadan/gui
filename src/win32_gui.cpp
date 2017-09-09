@@ -433,7 +433,7 @@ static void win32_init_rawinput(Win32State *state)
     assert(registered);
 }
 
-int __stdcall WinMain(HINSTANCE instance, HINSTANCE prev_instance, char *cmd_line, int cmd_show)
+void WinMainCRTStartup()
 {
     win32_state->app_memory.platform.allocate = win32_allocate;
     win32_state->app_memory.platform.deallocate = win32_deallocate;
@@ -478,11 +478,5 @@ int __stdcall WinMain(HINSTANCE instance, HINSTANCE prev_instance, char *cmd_lin
         }
     }
     
-    return 0;
-}
-
-void WinMainCRTStartup()
-{
-    u32 result = WinMain(0, 0, 0, 0);
-    win32_api->ExitProcess(result);
+    win32_api->ExitProcess(0);
 }

@@ -1,4 +1,22 @@
-extern "C" int _fltused = 0;
+#define STBTT_ifloor        floor32
+#define STBTT_iceil         ceil32
+#define STBTT_sqrt          sqrt32
+#define STBTT_pow           pow32
+#define STBTT_cos           cos32
+#define STBTT_acos          acos32
+#define STBTT_fabs          abs32
+#define STBTT_fmod          mod32
+#define STBTT_malloc(x, u)  platform.virtual_alloc(x)
+#define STBTT_free(x, u)    platform.virtual_free(x)
+#define STBTT_assert        assert
+#define STBTT_strlen        string_length
+#define STBTT_memcpy        copy_memory
+#define STBTT_memset        set_memory
+
+#define NULL 0
+#define STBTT_STATIC
+#define STB_TRUETYPE_IMPLEMENTATION
+#include "stb_truetype.h"
 
 #include "gui.h"
 
@@ -9,6 +27,8 @@ extern "C" int _fltused = 0;
 
 #include "gui_draw.cpp"
 #include "gui_elements.cpp"
+
+#include "format_string.h"
 
 struct AppState
 {
@@ -114,34 +134,32 @@ static void render_ui(UIState *ui, i32 display_width, i32 display_height)
     ui->num_vertices = 0;
 }
 
-#include "format_string.h"
+// inline void ui_newline(UIState *ui)
+// {
+//     DrawContext *dc = ui->draw_context;
+//     dc->at.x = dc->min_pos.x;
+//     dc->at.y += dc->current_line_height;
+// }
 
-inline void ui_newline(UIState *ui)
-{
-    DrawContext *dc = ui->draw_context;
-    dc->at.x = dc->min_pos.x;
-    dc->at.y += dc->current_line_height;
-}
+// inline void ui_text(UIState *ui, char *text)
+// {
+//     DrawContext *dc = ui->draw_context;
+//     vec2 pos = dc->at;
+//     f32 font_size = ui->current_font.size;
+//     u32 color = ui->colors[UIColor_Text];
 
-inline void ui_text(UIState *ui, char *text)
-{
-    DrawContext *dc = ui->draw_context;
-    vec2 pos = dc->at;
-    f32 font_size = ui->current_font.size;
-    u32 color = ui->colors[UIColor_Text];
+//     vec2 text_size = add_text(ui, text, pos, font_size, color);
+//     dc->at.x += text_size.x;
+//     dc->current_line_height = max(dc->current_line_height, text_size.y);
+// }
 
-    vec2 text_size = add_text(ui, text, pos, font_size, color);
-    dc->at.x += text_size.x;
-    dc->current_line_height = max(dc->current_line_height, text_size.y);
-}
-
-inline void ui_textf(UIState *ui, char *format, ...)
-{
-    char text_buffer[256];
-    param_list params = get_params_after(format);
-    format_string_vararg(text_buffer, sizeof(text_buffer), format, params);
-    ui_text(ui, text_buffer);
-}
+// inline void ui_textf(UIState *ui, char *format, ...)
+// {
+//     char text_buffer[256];
+//     param_list params = get_params_after(format);
+//     format_string_vararg(text_buffer, sizeof(text_buffer), format, params);
+//     ui_text(ui, text_buffer);
+// }
 
 inline void change_unit_and_size(char **unit, usize *size)
 {
@@ -181,10 +199,43 @@ static UPDATE_AND_RENDER(update_and_render)
         init_ui(&app_state->ui_state, input);
     }
 
-    gl.ClearColor(0xEA / 255.0f, 0xEF / 255.0f, 0xF3 / 255.0f, 1.0f);
+    gl.ClearColor(0xED / 255.0f, 0xEF / 255.0f, 0xF5 / 255.0f, 1.0f);
     gl.Clear(GL_COLOR_BUFFER_BIT);
 
     UIState *ui = &app_state->ui_state;
+    begin_ui(ui, window_width, window_height);
+    {
+        // NOTE(dan): background
+        #if 0
+        {
+            u32 top_left_color     = 0xFFAE323F;
+            u32 bottom_left_color  = 0xFFb2364E;
+            u32 top_right_color    = 0xFFC4558E;
+            u32 bottom_right_color = 0xFFC95d9F;
+            
+            add_color_quad(ui, ui->min_pos, ui->max_pos, 
+                           top_left_color, top_right_color, bottom_left_color, bottom_right_color);
+        }
+        #endif
+        
+        // NOTE(dan): menu
+        {
+            f32 menu_bar_height = 25.0f;
+            begin_menu_bar(ui, menu_bar_height);
+            {
+                if (menu_bar_button(ui, "File"))
+                {
+                }
+                if (menu_bar_button(ui, "View"))
+                {
+                }
+            }
+            end_menu_bar(ui);
+        }
+    }
+    render_ui(ui, window_width, window_height);
+
+    #if 0
     clear_ui(ui, (f32)window_width, (f32)window_height);
     {
         // NOTE(dan): background
@@ -239,5 +290,5 @@ static UPDATE_AND_RENDER(update_and_render)
         }
         end_panels(ui);
     }
-    render_ui(ui, window_width, window_height);
+    #endif
 }

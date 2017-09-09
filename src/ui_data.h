@@ -1,7 +1,18 @@
+#define PACK_COLORS_U32(r, g, b, a) (((u32)(a) << 24) | ((u32)(b) << 16) | ((u32)(g) << 8) | (u32)(r))
+
 static void set_default_colors(UIState *ui)
 {
-    ui->colors[UIColor_Text] = 0xFF0A0A0A;
-    ui->colors[UIColor_PanelBackground] = 0xFFF5F5F5;
+    ui->colors[UIColor_MenuBarBackground]      = PACK_COLORS_U32(255, 255, 255, 255);
+
+    ui->colors[UIColor_ButtonBackground]       = PACK_COLORS_U32(255, 255, 255, 170); 
+    ui->colors[UIColor_ButtonBackgroundActive] = PACK_COLORS_U32(  8, 150, 251, 170);
+    ui->colors[UIColor_ButtonBackgroundHover]  = PACK_COLORS_U32(  8, 150, 251, 170);
+
+    ui->colors[UIColor_ButtonBorderHover]      = PACK_COLORS_U32( 81, 148, 225, 255);
+
+    ui->colors[UIColor_Text]                   = PACK_COLORS_U32( 77, 77, 79, 255);
+
+    ui->menu_bar_padding = v2(12.0f, 0.0f);
 }
 
 static char *ui_vertex_shader = R"GLSL(

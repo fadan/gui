@@ -323,6 +323,7 @@ static vec2 add_text(UIState *ui, char *text, vec2 pos, f32 size, u32 color)
     vec2 at_pos = pos;
     f32 scale = size / font->size;
 
+    u32 prev_unicode = 0;
     while (at < end)
     {
         u32 unicode = read_unicode((u8 **)&at, (u8 *)end);
@@ -330,6 +331,13 @@ static vec2 add_text(UIState *ui, char *text, vec2 pos, f32 size, u32 color)
         {
             break;
         }
+
+        if (prev_unicode)
+        {
+            // TODO(dan): the default font does not have a kern table!
+            at_pos.x += stbtt_GetCodepointKernAdvance(&font->font_info, prev_unicode, unicode);
+        }
+        prev_unicode = unicode;
 
         // TODO(dan): 0xFF -> max unicode codepoint
         unichar c = (unichar)unicode;
@@ -420,8 +428,9 @@ static void init_default_ui_texture(UIState *ui)
         u32 num_glyph_ranges = 0;
         u32 font_offset = stbtt_GetFontOffsetForIndex(decompressed_font, 0);
 
-        stbtt_fontinfo font_info;
-        stbtt_InitFont(&font_info, decompressed_font, font_offset);
+        // stbtt_fontinfo font_info;
+        stbtt_fontinfo *font_info = &font->font_info;
+        stbtt_InitFont(font_info, decompressed_font, font_offset);
 
         for (unichar *glyph_range = glyph_ranges; glyph_range[0] && glyph_range[1]; glyph_range += 2)
         {
@@ -459,7 +468,7 @@ static void init_default_ui_texture(UIState *ui)
         stbtt_PackSetOversampling(&pack_context, 1, 1);
         stbrp_pack_rects((stbrp_context *)pack_context.pack_info, &default_texture_rect, 1);
 
-        u32 num_packed_rects = stbtt_PackFontRangesGatherRects(&pack_context, &font_info, packed_ranges, num_glyph_ranges, packed_rects);
+        u32 num_packed_rects = stbtt_PackFontRangesGatherRects(&pack_context, font_info, packed_ranges, num_glyph_ranges, packed_rects);
 
         stbtt_PackSetOversampling(&pack_context, 3, 1);
         stbrp_pack_rects((stbrp_context *)pack_context.pack_info, packed_rects, num_packed_rects);
@@ -493,15 +502,15 @@ static void init_default_ui_texture(UIState *ui)
             }
         }
 
-        stbtt_PackFontRangesRenderIntoRects(&pack_context, &font_info, packed_ranges, num_glyph_ranges, packed_rects);
+        stbtt_PackFontRangesRenderIntoRects(&pack_context, font_info, packed_ranges, num_glyph_ranges, packed_rects);
         stbtt_PackEnd(&pack_context);
 
-        f32 font_scale = stbtt_ScaleForPixelHeight(&font_info, font->size);
+        f32 font_scale = stbtt_ScaleForPixelHeight(font_info, font->size);
 
         i32 unscaled_ascent;
         i32 unscaled_descent;
         i32 unscaled_line_gap;
-        stbtt_GetFontVMetrics(&font_info, &unscaled_ascent, &unscaled_descent, &unscaled_line_gap);
+        stbtt_GetFontVMetrics(font_info, &unscaled_ascent, &unscaled_descent, &unscaled_line_gap);
 
         font->ascent = font_scale * unscaled_ascent;
         font->descent = font_scale * unscaled_descent;

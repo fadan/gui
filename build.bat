@@ -50,7 +50,7 @@ set cplflags=%cplflags% -nologo -FC -WX -W4 -wd4100 -wd4201 -wd4505 -wd4189 -wd4
 :: -nologo         : suppress the banner
 :: -incremental:no : disable incremental linking
 :: -opt:ref        : eliminate unreferenced funcs and data
-set linkflags=-nologo -incremental:no -opt:ref -nodefaultlib -stack:0x100000,0x100000 kernel32.lib
+set linkflags=-nologo -incremental:no -opt:ref -nodefaultlib -subsystem:windows -stack:0x100000,0x100000 kernel32.lib
 
 ::
 :: Build

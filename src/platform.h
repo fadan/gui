@@ -231,7 +231,7 @@ inline u32 get_scan_code_offset(u32 scan_code)
     return offset;
 }
 
-enum
+enum MouseButtonID
 {
     mouse_button_left,
     mouse_button_middle,
@@ -759,6 +759,57 @@ inline f32 cos32(f32 x)
 
     f32 cosine = c0 + x * (c1 + x * (c2 + x * (c3 + x * (c4 + x * (c5 + x * (c6 + x * c7))))));
     return cosine;
+}
+
+union vec2
+{
+    struct
+    {
+        f32 x, y;
+    };
+    struct
+    {
+        f32 u, v;
+    };
+    f32 e[2];
+};
+
+inline vec2 v2(f32 x, f32 y)
+{
+    vec2 result = {x, y};
+    return result;
+}
+
+#define vec2_add(a, b)      v2( (a).x + (b).x,   (a).y + (b).y )
+#define vec2_sub(a, b)      v2( (a).x - (b).x,   (a).y - (b).y )
+
+#define vec2_mul(s, a)      v2( (s) * (a).x,  (s) * (a).y )
+#define vec2_inner(a, x)    ( (a).x * (b).x + (a).y * (b).y )
+#define vec2_hadamard(a, b) v2( (a).x * (b).x, (a).y * (b).y )
+
+#define vec2_length2(a)     ( (a).x * (a).x + (a).y * (a).y )
+#define vec2_length(a)      sqrt32(vec2_length2(a))
+
+#define vec2_intersect(p, min_p, max_p) (((p).x >= (min_p).x) && ((p).x < (max_p).x) && \
+                                         ((p).y >= (min_p).y) && ((p).y < (max_p).y))
+
+union vec4
+{
+    struct
+    {
+        f32 x, y, z, w;
+    };
+    struct
+    {
+        f32 r, g, b, a;
+    };
+    f32 e[4];
+};
+
+inline vec4 v4(f32 x, f32 y, f32 z, f32 w)
+{
+    vec4 result = {x, y, z, w};
+    return result;
 }
 
 #define intsizeof(type) ((sizeof(type) + sizeof(intptr) - 1) & ~(sizeof(intptr) - 1))

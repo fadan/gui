@@ -6,10 +6,13 @@ typedef Win32Api_PROC (__stdcall Win32GetProcAddress)(void *module, char *proc);
 typedef void * (__stdcall Win32LoadLibrary)(char *lib);
 typedef void * (__stdcall Win32Api_FreeLibrary)(void *module);
 
+extern "C" int _fltused = 0;
+
 #if 1
     extern "C" __declspec(dllimport) Win32Api_PROC __stdcall GetProcAddress(void *module, char *proc);
     extern "C" __declspec(dllimport) void * __stdcall LoadLibraryA(char *lib);
     extern "C" __declspec(dllimport) int __stdcall FreeLibrary(void *module); 
+
 
     #define win32_get_proc_address GetProcAddress
     #define win32_load_library LoadLibraryA
