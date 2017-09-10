@@ -18,17 +18,15 @@
 #define STB_TRUETYPE_IMPLEMENTATION
 #include "stb_truetype.h"
 
-#include "gui.h"
-
-#define MAX_NUM_VERTICES 1024
-#define MAX_NUM_ELEMENTS 1024
-
-#include "ui_data.h"
-
-#include "gui_draw.cpp"
-#include "gui_elements.cpp"
+#define MAX_NUM_VERTICES 2048
+#define MAX_NUM_ELEMENTS 4096
 
 #include "format_string.h"
+
+#include "gui.h"
+#include "gui_data.h"
+#include "gui_draw.cpp"
+#include "gui_elements.cpp"
 
 struct AppState
 {
@@ -93,6 +91,8 @@ static void init_ui(UIState *ui, PlatformInput *input)
     gl.TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
     gl.TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
     gl.TexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, font->texture_width, font->texture_height, 0, GL_RGBA, GL_UNSIGNED_BYTE, font->texture_pixels);
+
+    dllist_init(&ui->panel_sentinel);
 }
 
 static void render_ui(UIState *ui, i32 display_width, i32 display_height)
@@ -134,33 +134,6 @@ static void render_ui(UIState *ui, i32 display_width, i32 display_height)
     ui->num_vertices = 0;
 }
 
-// inline void ui_newline(UIState *ui)
-// {
-//     DrawContext *dc = ui->draw_context;
-//     dc->at.x = dc->min_pos.x;
-//     dc->at.y += dc->current_line_height;
-// }
-
-// inline void ui_text(UIState *ui, char *text)
-// {
-//     DrawContext *dc = ui->draw_context;
-//     vec2 pos = dc->at;
-//     f32 font_size = ui->current_font.size;
-//     u32 color = ui->colors[UIColor_Text];
-
-//     vec2 text_size = add_text(ui, text, pos, font_size, color);
-//     dc->at.x += text_size.x;
-//     dc->current_line_height = max(dc->current_line_height, text_size.y);
-// }
-
-// inline void ui_textf(UIState *ui, char *format, ...)
-// {
-//     char text_buffer[256];
-//     param_list params = get_params_after(format);
-//     format_string_vararg(text_buffer, sizeof(text_buffer), format, params);
-//     ui_text(ui, text_buffer);
-// }
-
 inline void change_unit_and_size(char **unit, usize *size)
 {
     *unit = "B";
@@ -199,67 +172,37 @@ static UPDATE_AND_RENDER(update_and_render)
         init_ui(&app_state->ui_state, input);
     }
 
-    gl.ClearColor(0xED / 255.0f, 0xEF / 255.0f, 0xF5 / 255.0f, 1.0f);
+    gl.ClearColor(237.0f / 255.0f, 239.0f / 255.0f, 245.0f / 255.0f, 1.0f);
     gl.Clear(GL_COLOR_BUFFER_BIT);
 
     UIState *ui = &app_state->ui_state;
     begin_ui(ui, window_width, window_height);
     {
-        // NOTE(dan): background
-        #if 0
-        {
-            u32 top_left_color     = 0xFFAE323F;
-            u32 bottom_left_color  = 0xFFb2364E;
-            u32 top_right_color    = 0xFFC4558E;
-            u32 bottom_right_color = 0xFFC95d9F;
-            
-            add_color_quad(ui, ui->min_pos, ui->max_pos, 
-                           top_left_color, top_right_color, bottom_left_color, bottom_right_color);
-        }
-        #endif
-        
-        // NOTE(dan): menu
-        {
-            f32 menu_bar_height = 25.0f;
-            begin_menu_bar(ui, menu_bar_height);
-            {
-                if (menu_bar_button(ui, "File"))
-                {
-                }
-                if (menu_bar_button(ui, "View"))
-                {
-                }
-            }
-            end_menu_bar(ui);
-        }
-    }
-    render_ui(ui, window_width, window_height);
-
-    #if 0
-    clear_ui(ui, (f32)window_width, (f32)window_height);
-    {
-        // NOTE(dan): background
-        {
-            u32 top_left_color     = 0xFFae323f;
-            u32 bottom_left_color  = 0xFFb2364e;
-            u32 top_right_color    = 0xFFc4558e;
-            u32 bottom_right_color = 0xFFc95d9f;
-            draw_gradient_background(ui, top_left_color, bottom_left_color, bottom_right_color, top_right_color);
-        }
-
         // NOTE(dan): menu bar
         {
-            begin_menu_bar(ui, 25.0f);
+            ui->next_panel_pos  = v2(0.0f, 0.0f);
+            ui->next_panel_size = v2((f32)window_width, 25.0f);
+
+            push_style_vec2(ui, panel_padding, v2(0, 0));
+            begin_panel(ui, "Menu Bar");
             {
-                menu_bar_button(ui, "File");
-                menu_bar_button(ui, "View");
+                if (button(ui, "File"))
+                {
+                }
+                if (button(ui, "View"))
+                {
+                }
             }
-            end_menu_bar(ui);
+            end_panel(ui);
+            pop_style(ui);
         }
 
-        begin_panels(ui);
+        // NOTE(dan): info panel
         {
-            begin_panel(ui, "Info", v2(300, 200));
+            ui->next_panel_pos  = v2(0.0f, 30.0f);
+            ui->next_panel_size = v2(300.0f, 200.0f);
+
+            Panel *panel = begin_panel(ui, "Info", PanelFlag_Default);
             {
                 PlatformMemoryStats memory_stats = platform.get_memory_stats();
 
@@ -271,24 +214,30 @@ static UPDATE_AND_RENDER(update_and_render)
                 usize total_used = memory_stats.total_used;
                 change_unit_and_size(&total_used_unit, &total_used);
 
-                ui_textf(ui, "Mouse: (%d, %d)", input->mouse_pos[0], input->mouse_pos[1]);
-                ui_newline(ui);
-                ui_textf(ui, "Vertices: %d Elements: %d", ui->num_vertices, ui->num_elements);
-                ui_newline(ui);
-                ui_textf(ui, "Memory blocks: %d Total: %d%s Used: %d%s", 
-                         memory_stats.num_memblocks, total_size, total_size_unit, total_used, total_used_unit);
-                ui_newline(ui);
-                ui_textf(ui, "Frame time: %.3fs", input->dt);
-            }
-            end_panel(ui);
+                textf_out(ui, "Frame time: %.3fs", input->dt);
+                newline(ui);
+                textf_out(ui, "Vertices: %d Elements: %d", ui->num_vertices, ui->num_elements);
+                newline(ui);
+                textf_out(ui, "Memory blocks: %d Total: %d%s Used: %d%s", 
+                          memory_stats.num_memblocks, total_size, total_size_unit, total_used, total_used_unit);
+                newline(ui);
+                newline(ui);
+                textf_out(ui, "%15s = vec2(%.1f, %.1f)", "mouse_pos", ui->mouse_pos.x, ui->mouse_pos.y);
+                newline(ui);
+                textf_out(ui, "%15s = vec2(%.1f, %.1f)", "delta_moues_pos", ui->delta_mouse_pos.x, ui->delta_mouse_pos.y);
+                newline(ui);
+                textf_out(ui, "%15s = vec2(%.1f, %.1f)", "clicked_at", ui->clicked_at.x, ui->clicked_at.y);
+                newline(ui);
+                newline(ui);
 
-            begin_panel(ui, "Volume Mixer", v2(300, 200));
-            {
-                ui_text(ui, "asdf");
+                textf_out(ui, "%24s = %s", "is_mouse_down", is_mouse_down(ui, mouse_button_left) ? "true" : "false");
+                newline(ui);
+                textf_out(ui, "%24s = %s", "is_mouse_clicked_in_rect", is_mouse_clicked_in_rect(ui, mouse_button_left, panel->bounds) ? "true" : "false");
+                newline(ui);
+                textf_out(ui, "%24s = %s", "is_mouse_hovered_rect", is_mouse_hovered_rect(ui, panel->bounds) ? "true" : "false");
             }
             end_panel(ui);
         }
-        end_panels(ui);
     }
-    #endif
+    render_ui(ui, window_width, window_height);
 }

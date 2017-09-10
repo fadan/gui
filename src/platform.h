@@ -117,7 +117,8 @@ typedef char test_size_usize[sizeof(usize) == sizeof(char *) ? 1 : -1];
 #define GB  (1024LL * MB)
 #define TB  (1024LL * GB)
 
-#define F32_MAX 3.402823E+38F
+#define F32_MIN 1.175494e-38f
+#define F32_MAX 3.402823e+38f
 
 #if COMPILER == COMPILER_MSVC
     extern "C" long _InterlockedExchangeAdd(long volatile *addend, long value);
@@ -790,27 +791,26 @@ inline vec2 v2(f32 x, f32 y)
 #define vec2_length2(a)     ( (a).x * (a).x + (a).y * (a).y )
 #define vec2_length(a)      sqrt32(vec2_length2(a))
 
-#define vec2_intersect(p, min_p, max_p) (((p).x >= (min_p).x) && ((p).x < (max_p).x) && \
-                                         ((p).y >= (min_p).y) && ((p).y < (max_p).y))
+#define vec2_intersect(test_pos, min_pos, max_pos) (((test_pos).x >= (min_pos).x) && ((test_pos).x < (max_pos).x) && \
+                                                    ((test_pos).y >= (min_pos).y) && ((test_pos).y < (max_pos).y))
 
-union vec4
+struct rect2
 {
-    struct
-    {
-        f32 x, y, z, w;
-    };
-    struct
-    {
-        f32 r, g, b, a;
-    };
-    f32 e[4];
+    vec2 min_pos;
+    vec2 max_pos;
 };
 
-inline vec4 v4(f32 x, f32 y, f32 z, f32 w)
+inline rect2 r2(vec2 min_pos, vec2 max_pos)
 {
-    vec4 result = {x, y, z, w};
+    rect2 result = {min_pos, max_pos};
     return result;
 }
+
+#define rect2_inverted_infinity()           ( r2(vec2(F32_MAX, F32_MAX), vec2(F32_MIN, F32_MIN)) )
+#define rect2_min_dim(min_pos, dim)         ( r2(min_pos, vec2_add(min_pos, dim)) )
+
+#define rect2_dim(rect)                     ( vec2_sub((rect).max_pos, (rect).min_pos) )
+#define rect2_offset(rect, offset)          ( r2(vec2_add((rect).min_pos, offset), vec2_add((rect).max_pos, offset)) )
 
 #define intsizeof(type) ((sizeof(type) + sizeof(intptr) - 1) & ~(sizeof(intptr) - 1))
 

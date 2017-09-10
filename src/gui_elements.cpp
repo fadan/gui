@@ -21,92 +21,117 @@ inline b32 is_mouse_down(UIState *ui, MouseButtonID button_id)
     return down;
 }
 
-inline b32 is_mouse_clicked(UIState *ui, MouseButtonID button_id)
+inline b32 is_mouse_clicked_in_rect(UIState *ui, MouseButtonID button_id, rect2 rect)
 {
-    b32 clicked = (ui->input->mouse_buttons[button_id].released);
-    return clicked;
-}
-
-inline b32 is_mouse_clicked_in_rect(UIState *ui, MouseButtonID button_id, vec2 min_pos, vec2 max_pos)
-{
-    b32 clicked_in_rect = (is_mouse_clicked(ui, button_id) && vec2_intersect(ui->clicked_at, min_pos, max_pos));
+    b32 clicked_in_rect = (ui->input->mouse_buttons[button_id].down &&
+                           vec2_intersect(ui->clicked_at, rect.min_pos, rect.max_pos));
     return clicked_in_rect;
 }
 
-inline b32 is_mouse_hovered_rect(UIState *ui, vec2 min_pos, vec2 max_pos)
+inline b32 is_mouse_hovered_rect(UIState *ui, rect2 rect)
 {
-    b32 hovered_rect = (vec2_intersect(ui->mouse_pos, min_pos, max_pos));
+    b32 hovered_rect = (vec2_intersect(ui->mouse_pos, rect.min_pos, rect.max_pos));
     return hovered_rect;
 }
 
-inline b32 was_mouse_hovered_rect(UIState *ui, vec2 min_pos, vec2 max_pos)
+inline b32 was_mouse_hovered_rect(UIState *ui, rect2 rect)
 {
-    b32 was_hovered_rect = (vec2_intersect(ui->prev_mouse_pos, min_pos, max_pos));
+    b32 was_hovered_rect = (vec2_intersect(ui->prev_mouse_pos, rect.min_pos, rect.max_pos));
     return was_hovered_rect;
+}
+
+inline Panel *find_panel_by_id(UIState *ui, u32 id)
+{
+    Panel *panel_sentinel = &ui->panel_sentinel;
+    Panel *panel = 0;
+    for (Panel *test_panel = panel_sentinel->next; test_panel != panel_sentinel; test_panel = test_panel->next)
+    {
+        if (test_panel->id == id)
+        {
+            panel = test_panel;
+            break;
+        }
+    }
+    return panel;
 }
 
 static Panel *get_or_create_panel(UIState *ui, char *name)
 {
     u32 id = djb2_hash(name);
 
-    Panel *panel = 0;
-    for (u32 panel_index = 0; panel_index < ui->num_panels; ++panel_index)
-    {
-        Panel *test_panel = ui->panels + panel_index;
-        if (test_panel->id == id)
-        {
-            panel = test_panel;
-            break;
-        }        
-    }
-
+    Panel *panel = find_panel_by_id(ui, id);
     if (!panel)
     {
-        assert(ui->num_panels < array_count(ui->panels));
-        panel = ui->panels + ui->num_panels++;
+        allocate_freelist(panel, ui->first_free_panel, push_struct(&ui->memory, Panel));
+        dllist_insert_last(&ui->panel_sentinel, panel);
 
-        *panel = {0};
         panel->id = id;
         panel->status = PanelStatus_Float;
+        panel->bounds = rect2_min_dim(ui->next_panel_pos, ui->next_panel_size);
     }
-
     return panel;
 }
 
-static Panel *begin_panel(UIState *ui, char *name, vec2 default_pos = v2(30.0f, 30.0f), vec2 default_size = v2(300.0f, 200.0f))
+static Panel *begin_panel(UIState *ui, char *name, u32 flags = PanelFlag_None)
 {
     Panel *panel = get_or_create_panel(ui, name);
+    panel->flags = flags;
 
-    if ((panel->min_pos.x == panel->max_pos.x) && (panel->max_pos.y == panel->max_pos.y))
+    // NOTE(dan): drag
+    rect2 header_bb = r2(panel->bounds.min_pos, panel->bounds.max_pos);
+    if (panel->flags & PanelFlag_Movable)
     {
-        panel->min_pos = default_pos;
-        panel->max_pos = vec2_add(panel->min_pos, default_size);
+        if (panel->flags & PanelFlag_HasHeader)
+        {
+            header_bb.max_pos.y = header_bb.min_pos.y + ui->current_font.size + 2 * ui->panel_header_padding.y;
+        }
+
+        if (is_mouse_clicked_in_rect(ui, mouse_button_left, header_bb))
+        {
+            panel->bounds = rect2_offset(panel->bounds, ui->delta_mouse_pos);
+            ui->clicked_at = vec2_add(ui->clicked_at, ui->delta_mouse_pos);
+        }
     }
-    
-    panel->at = panel->min_pos;
+    vec2 header_dim = rect2_dim(header_bb);
+
+    panel->layout.min_pos = vec2_add(panel->bounds.min_pos, ui->panel_padding);
+    panel->layout.max_pos = vec2_sub(panel->bounds.max_pos, ui->panel_padding);
+    panel->layout_at = panel->layout.min_pos;
+    panel->current_line_height = 0;
+
+    // NOTE(dan): draw header
+    if (panel->flags & PanelFlag_HasHeader)
+    {
+        u32 background_color = ui->colors[UIColor_PanelHeaderBackground];
+        u32 text_color       = ui->colors[UIColor_Text];
+        vec2 text_pos = vec2_add(panel->bounds.min_pos, ui->panel_header_padding);
+
+        add_rect_filled(ui, header_bb.min_pos, header_bb.max_pos, background_color);
+        add_text(ui, name, text_pos, ui->current_font.size, text_color);
+
+        panel->layout_at.y += header_dim.y;
+        panel->layout.min_pos.y += header_dim.y;
+    }
+
+    // NOTE(dan): draw panel
+    {
+        u32 background_color = ui->colors[UIColor_PanelBackground];
+        rect2 panel_bb = panel->bounds;
+
+        if (panel->flags & PanelFlag_HasHeader)
+        {
+            panel_bb.min_pos.y += header_dim.y;
+        }
+
+        add_rect_filled(ui, panel_bb.min_pos, panel_bb.max_pos, background_color);
+    }
 
     ui->current_panel = panel;
-
     return panel;
 }
 
 inline void end_panel(UIState *ui)
 {
-}
-
-static void begin_menu_bar(UIState *ui, f32 menu_bar_height)
-{
-    Panel *panel = begin_panel(ui, "menu bar");
-    f32 bottom_border_height = 2.0f;
-
-    panel->min_pos = ui->min_pos;
-    panel->max_pos = v2(ui->max_pos.x, ui->min_pos.y + menu_bar_height);
-
-    u32 background_color = ui->colors[UIColor_MenuBarBackground];
-    // u32 menu_bar_border_color = ui->colors[UIColor_MenuBarBorder];
-
-    add_rect_filled(ui, panel->min_pos, panel->max_pos, background_color);
-    // add_rect_filled(ui, v2(panel->min_pos.x, panel->max_pos.y - bottom_border_height), panel->max_pos, menu_bar_border_color);
 }
 
 enum ButtonState
@@ -118,18 +143,18 @@ enum ButtonState
     ButtonState_LeftClick,
 };
 
-static ButtonState button_behavior(UIState *ui, vec2 min_pos, vec2 max_pos)
+static ButtonState button_behavior(UIState *ui, rect2 bounds)
 {
     ButtonState state = ButtonState_Inactive;
 
-    b32 hovered = is_mouse_hovered_rect(ui, min_pos, max_pos);
+    b32 hovered = is_mouse_hovered_rect(ui, bounds);
     if (hovered)
     {
         state = ButtonState_Hover;
         if (is_mouse_down(ui, mouse_button_left))
         {
             state = ButtonState_Active;
-            if (is_mouse_clicked_in_rect(ui, mouse_button_left, min_pos, max_pos))
+            if (is_mouse_clicked_in_rect(ui, mouse_button_left, bounds))
             {
                 state = ButtonState_LeftClick;
             }
@@ -138,22 +163,22 @@ static ButtonState button_behavior(UIState *ui, vec2 min_pos, vec2 max_pos)
     return state;
 }
 
-static b32 menu_bar_button(UIState *ui, char *name)
+static b32 button(UIState *ui, char *name)
 {
     Panel *panel = ui->current_panel;
-    vec2 padding = ui->menu_bar_padding;
+    vec2 padding = v2(ui->menu_bar_button_padding_x, 0.0f);
 
-    vec2 menu_bar_size = vec2_sub(panel->max_pos, panel->min_pos);
+    vec2 menu_bar_size = vec2_sub(panel->bounds.max_pos, panel->bounds.min_pos);
     vec2 text_size = calc_text_size(ui, name, ui->current_font.size);
     vec2 button_size = vec2_add(text_size, vec2_mul(2.0f, padding));
 
-    vec2 min_pos = panel->at;
+    vec2 min_pos = panel->layout_at;
     vec2 max_pos = vec2_add(min_pos, v2(button_size.x, menu_bar_size.y));
 
     vec2 text_pos = vec2_add(min_pos, padding);
     text_pos.y += (menu_bar_size.y - ui->current_font.size) / 2;
     
-    ButtonState state = button_behavior(ui, min_pos, max_pos);
+    ButtonState state = button_behavior(ui, r2(min_pos, max_pos));
 
     u32 text_color = ui->colors[UIColor_Text];
     u32 background_color = ui->colors[UIColor_ButtonBackground];
@@ -169,13 +194,33 @@ static b32 menu_bar_button(UIState *ui, char *name)
     add_rect_filled(ui, min_pos, max_pos, background_color);
     add_text(ui, name, text_pos, ui->current_font.size, text_color);
 
-    panel->at.x += button_size.x;
+    panel->layout_at.x += button_size.x;
 
     b32 pressed = (state == ButtonState_LeftClick);
     return pressed;
 }
 
-inline void end_menu_bar(UIState *ui)
+inline void newline(UIState *ui)
 {
-    end_panel(ui);
+    Panel *panel = ui->current_panel;
+    panel->layout_at.x = panel->layout.min_pos.x;
+    panel->layout_at.y += panel->current_line_height;
+}
+
+inline void text_out(UIState *ui, char *text)
+{
+    Panel *panel = ui->current_panel;
+    u32 color = ui->colors[UIColor_Text];
+
+    vec2 text_size = add_text(ui, text, panel->layout_at, ui->current_font.size, color);
+    panel->layout_at.x += text_size.x;
+    panel->current_line_height = max(panel->current_line_height, text_size.y);
+}
+
+inline void textf_out(UIState *ui, char *format, ...)
+{
+    char text_buffer[256];
+    param_list params = get_params_after(format);
+    format_string_vararg(text_buffer, sizeof(text_buffer), format, params);
+    text_out(ui, text_buffer);
 }
