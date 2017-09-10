@@ -812,6 +812,9 @@ inline rect2 r2(vec2 min_pos, vec2 max_pos)
 #define rect2_dim(rect)                     ( vec2_sub((rect).max_pos, (rect).min_pos) )
 #define rect2_offset(rect, offset)          ( r2(vec2_add((rect).min_pos, offset), vec2_add((rect).max_pos, offset)) )
 
+#define rect2_intersect(a, b) (!(((b.min_pos.x > a.max_pos.x) || (b.max_pos.x < a.min_pos.x) || \
+                                  (b.min_pos.y > a.max_pos.y) || (b.max_pos.y < a.min_pos.y))))
+
 #define intsizeof(type) ((sizeof(type) + sizeof(intptr) - 1) & ~(sizeof(intptr) - 1))
 
 typedef char *param_list;

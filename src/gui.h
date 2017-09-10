@@ -52,22 +52,17 @@ struct Font
     u16 glyph_index_lut[256];
 };
 
-enum PanelStatus
-{
-    PanelStatus_Float,
-
-    PanelStatus_Docked,
-    PanelStatus_Dragged,
-};
-
 enum PanelFlags
 {
     PanelFlag_None,
 
-    PanelFlag_Movable   = 1 << 0,
-    PanelFlag_HasHeader = 1 << 1,
+    PanelFlag_Movable    = 1 << 0,
+    PanelFlag_HasHeader  = 1 << 1,
+    PanelFlag_ResizableX = 1 << 2,
+    PanelFlag_ResizableY = 1 << 3,
 
-    PanelFlag_Default = (PanelFlag_Movable | PanelFlag_HasHeader),
+    PanelFlag_Resizable = (PanelFlag_ResizableX | PanelFlag_ResizableY),
+    PanelFlag_Default   = (PanelFlag_Movable | PanelFlag_Resizable | PanelFlag_HasHeader),
 };
 
 struct Panel
@@ -81,19 +76,13 @@ struct Panel
 
     u32 id;
     u32 flags;
-    PanelStatus status;
 
     char name[32];
 
     rect2 bounds;
     rect2 layout;
     vec2 layout_at;
-    // vec2 min_pos;
-    // vec2 max_pos;
-    // vec2 at;
 
-    // 
-    
     f32 current_line_height;
 };
 
@@ -101,6 +90,7 @@ enum UIColors
 {
     UIColor_PanelHeaderBackground,
     UIColor_PanelBackground,
+    UIColor_PanelBorder,
 
     UIColor_ButtonBackground,
     UIColor_ButtonBackgroundActive,

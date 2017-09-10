@@ -238,6 +238,28 @@ static UPDATE_AND_RENDER(update_and_render)
             }
             end_panel(ui);
         }
+
+        // NOTE(dan): test panel
+        {
+            ui->next_panel_pos = v2(350.0f, 30.0f);
+            ui->next_panel_size = v2(300.0f, 200.0f);
+
+            Panel *panel = begin_panel(ui, "Test", PanelFlag_Default);
+            {
+                text_out(ui, "sentinel > ");
+
+                Panel *sentinel = &ui->panel_sentinel;
+                for (Panel *p = sentinel->next; p != sentinel; p = p->next)
+                {
+                    textf_out(ui, "%s > ", p->name);
+                }
+                text_out(ui, "sentinel");
+                newline(ui);
+                newline(ui);
+                textf_out(ui, "active = %s", (ui->active_panel) ? ui->active_panel->name : "(null)");
+            }
+            end_panel(ui);
+        }
     }
     render_ui(ui, window_width, window_height);
 }

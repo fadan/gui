@@ -66,8 +66,9 @@ static Panel *get_or_create_panel(UIState *ui, char *name)
         dllist_insert_last(&ui->panel_sentinel, panel);
 
         panel->id = id;
-        panel->status = PanelStatus_Float;
         panel->bounds = rect2_min_dim(ui->next_panel_pos, ui->next_panel_size);
+
+        copy_string_and_null_terminate(name, panel->name, array_count(panel->name));
     }
     return panel;
 }
@@ -77,7 +78,7 @@ static Panel *begin_panel(UIState *ui, char *name, u32 flags = PanelFlag_None)
     Panel *panel = get_or_create_panel(ui, name);
     panel->flags = flags;
 
-    // NOTE(dan): drag
+    // NOTE(dan): handle drag
     rect2 header_bb = r2(panel->bounds.min_pos, panel->bounds.max_pos);
     if (panel->flags & PanelFlag_Movable)
     {
@@ -113,7 +114,7 @@ static Panel *begin_panel(UIState *ui, char *name, u32 flags = PanelFlag_None)
         panel->layout.min_pos.y += header_dim.y;
     }
 
-    // NOTE(dan): draw panel
+    // NOTE(dan): draw panel background
     {
         u32 background_color = ui->colors[UIColor_PanelBackground];
         rect2 panel_bb = panel->bounds;
@@ -127,11 +128,111 @@ static Panel *begin_panel(UIState *ui, char *name, u32 flags = PanelFlag_None)
     }
 
     ui->current_panel = panel;
+
+    // NOTE(dan): handle panel overlaps
+    {
+        rect2 panel_bb = panel->bounds;
+        if (is_mouse_hovered_rect(ui, panel_bb))
+        {
+            Panel *panel_sentinel = &ui->panel_sentinel;
+            Panel *active_panel = 0;
+            
+            if (is_mouse_down(ui, mouse_button_left))
+            {
+                for (Panel *test_panel = panel->next; test_panel != panel_sentinel; test_panel = test_panel->next)
+                {
+                    if (vec2_intersect(ui->mouse_pos, test_panel->bounds.min_pos, test_panel->bounds.max_pos))
+                    {
+                        active_panel = test_panel;
+                        break;
+                    }
+                }
+            }
+            else
+            {
+                for (Panel *test_panel = panel_sentinel->next; test_panel != panel_sentinel; test_panel = test_panel->next)
+                {
+                    if (test_panel != panel)
+                    {
+                        if (rect2_intersect(panel_bb, test_panel->bounds))
+                        {
+                            active_panel = test_panel;
+                            break;
+                        }
+                    }
+                }
+            }
+
+            if (!active_panel)
+            {
+                panel->prev->next = panel->next;
+                panel->next->prev = panel->prev;
+
+                dllist_insert_last(&ui->panel_sentinel, panel);
+
+                ui->active_panel = panel;
+            }
+        }
+    }
+
     return panel;
 }
 
 inline void end_panel(UIState *ui)
 {
+    Panel *panel = ui->current_panel;
+
+    if (panel->flags & PanelFlag_ResizableX || panel->flags & PanelFlag_ResizableY)
+    {
+        rect2 scaler_bb = r2(vec2_sub(panel->bounds.max_pos, ui->panel_padding), panel->bounds.max_pos);
+        u32 color = ui->colors[UIColor_PanelBorder];
+
+        vec2 vertices[] =
+        {
+            v2(scaler_bb.max_pos.x, scaler_bb.min_pos.y),
+            v2(scaler_bb.min_pos.x, scaler_bb.max_pos.y),
+            v2(scaler_bb.max_pos.x, scaler_bb.max_pos.y),
+        };
+        add_poly_filled(ui, vertices, array_count(vertices), color);
+
+        if (is_mouse_clicked_in_rect(ui, mouse_button_left, scaler_bb))
+        {
+            vec2 delta_mouse = ui->delta_mouse_pos;
+            vec2 min_panel_size = v2(40, 30);
+            vec2 panel_size = rect2_dim(panel->bounds);
+
+            if (panel->flags & PanelFlag_ResizableX)
+            {
+                if (panel_size.x + delta_mouse.x >= min_panel_size.x)
+                {
+                    if ((delta_mouse.x < 0) || (delta_mouse.x > 0 && ui->mouse_pos.x >= scaler_bb.min_pos.x))
+                    {
+                        panel->bounds.max_pos.x += delta_mouse.x;
+                        scaler_bb.min_pos.x += delta_mouse.x;
+                        scaler_bb.max_pos.x += delta_mouse.x;
+                    }
+                }
+            }
+
+            if (panel->flags & PanelFlag_ResizableY)
+            {
+                if (min_panel_size.y < panel_size.y + ui->delta_mouse_pos.y)
+                {
+                    if ((delta_mouse.y < 0) || (delta_mouse.y > 0 && ui->mouse_pos.y >= scaler_bb.min_pos.y))
+                    {
+                        panel->bounds.max_pos.y += delta_mouse.y;
+                        scaler_bb.min_pos.y += delta_mouse.y;
+                        scaler_bb.max_pos.y += delta_mouse.y;
+                    }
+                }
+            }
+
+            vec2 scaler_center = vec2_add(scaler_bb.min_pos, vec2_mul(0.5f, rect2_dim(scaler_bb)));
+            ui->clicked_at = scaler_center;
+        }
+    }
+
+    ui->current_panel = 0;
 }
 
 enum ButtonState
