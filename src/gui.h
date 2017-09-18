@@ -60,9 +60,19 @@ enum PanelFlags
     PanelFlag_HasHeader  = 1 << 1,
     PanelFlag_ResizableX = 1 << 2,
     PanelFlag_ResizableY = 1 << 3,
+    PanelFlag_Bordered   = 1 << 4,
 
     PanelFlag_Resizable = (PanelFlag_ResizableX | PanelFlag_ResizableY),
-    PanelFlag_Default   = (PanelFlag_Movable | PanelFlag_Resizable | PanelFlag_HasHeader),
+    PanelFlag_Default   = (PanelFlag_Movable | PanelFlag_Resizable | PanelFlag_HasHeader | PanelFlag_Bordered),
+};
+
+enum Behavior
+{
+    Behavior_Inactive,
+
+    Behavior_Hover,
+    Behavior_Active,
+    Behavior_LeftClick,
 };
 
 struct Panel
@@ -152,9 +162,12 @@ struct UIState
     // TODO(dan): how do we want to store styles?
 
     u32 colors[UIColor_Count];
-    f32 menu_bar_button_padding_x;
+    f32 menu_bar_height;
+    vec2 menu_bar_padding;
+    vec2 menu_bar_button_padding;
     vec2 panel_header_padding;
     vec2 panel_padding;
+    vec2 button_padding;
 
     u32 num_custom_styles;
     Style custom_styles[32];
@@ -174,13 +187,12 @@ struct UIState
 
     // NOTE(dan): draw
 
+    GLuint program;
     GLuint texture;
 
     GLuint vbo;
     GLuint vao;
     GLuint ebo;
-
-    GLuint program;
 
     GLuint attribs[attrib_count];
     GLuint uniforms[uniform_count];
@@ -192,41 +204,25 @@ struct UIState
     u32 num_elements;
 };
 
-#define push_style(ui, dest_init) \
-    assert(ui->num_custom_styles < array_count(ui->custom_styles)); \
-    Style *style = ui->custom_styles + ui->num_custom_styles++; \
-    style->dest = (void *)&ui->dest_init;
-
-#define push_style_u32(ui, dest, value) \
+#define push_style(ui, dest_init, value, t) \
     { \
-        push_style(ui, dest); \
-        style->type = StyleType_u32; \
-        style->value_u32 = ui->dest; \
-        ui->dest = value; \
+        assert(ui->num_custom_styles < array_count(ui->custom_styles)); \
+        Style *style = ui->custom_styles + ui->num_custom_styles++; \
+        style->dest = (void *)&ui->dest_init; \
+        style->type = StyleType_##t; \
+        style->value_##t = ui->dest_init; \
+        ui->dest_init = value; \
     }
 
-#define push_style_f32(ui, dest, value) \
-    { \
-        push_style(ui, dest); \
-        style->type = StyleType_f32; \
-        style->value_f32 = ui->dest; \
-        ui->dest = value; \
-    }
-
-#define push_style_vec2(ui, dest, value) \
-    { \
-        push_style(ui, dest); \
-        style->type = StyleType_vec2; \
-        style->value_vec2 = ui->dest; \
-        ui->dest = value; \
-    }
+#define push_style_u32( ui, dest, value) push_style(ui, dest, value,  u32)
+#define push_style_f32( ui, dest, value) push_style(ui, dest, value,  f32)
+#define push_style_vec2(ui, dest, value) push_style(ui, dest, value, vec2)
 
 #define push_style_color(ui, color_id, color) push_style_u32(ui, colors[color_id], color)
 
 inline void pop_style(struct UIState *ui)
 {
     assert(ui->num_custom_styles);
-
     if (ui->num_custom_styles)
     {
         Style *style = ui->custom_styles + ui->num_custom_styles - 1;

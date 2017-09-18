@@ -119,29 +119,26 @@ static void render_ui(UIState *ui, i32 display_width, i32 display_height)
     gl.ActiveTexture(GL_TEXTURE0);
     gl.BindTexture(GL_TEXTURE_2D, ui->texture);
 
-    if (ui->num_elements)
+    gl.BindBuffer(GL_ARRAY_BUFFER, ui->vbo);
+    gl.BufferData(GL_ARRAY_BUFFER, ui->num_vertices * sizeof(Vertex), ui->vertices, GL_STREAM_DRAW);
+
+    gl.BindBuffer(GL_ELEMENT_ARRAY_BUFFER, ui->ebo);
+    gl.BufferData(GL_ELEMENT_ARRAY_BUFFER, ui->num_elements * sizeof(GLuint), ui->elements, GL_STREAM_DRAW);
+
+    gl.Enable(GL_SCISSOR_TEST);
+
+    Panel *panel_sentinel = &ui->panel_sentinel;
+    for (Panel *panel = panel_sentinel->next; panel != panel_sentinel; panel = panel->next)
     {
-        gl.BindBuffer(GL_ARRAY_BUFFER, ui->vbo);
-        gl.BufferData(GL_ARRAY_BUFFER, ui->num_vertices * sizeof(Vertex), ui->vertices, GL_STREAM_DRAW);
+        vec2 min_pos = v2(panel->bounds.min_pos.x, display_height - panel->bounds.max_pos.y);
+        vec2 dim = rect2_dim(panel->bounds);
+        u32 element_index = panel->begin_element_index * sizeof(u32);
 
-        gl.BindBuffer(GL_ELEMENT_ARRAY_BUFFER, ui->ebo);
-        gl.BufferData(GL_ELEMENT_ARRAY_BUFFER, ui->num_elements * sizeof(GLuint), ui->elements, GL_STREAM_DRAW);
-
-        gl.Enable(GL_SCISSOR_TEST);
-
-        Panel *panel_sentinel = &ui->panel_sentinel;
-        for (Panel *panel = panel_sentinel->next; panel != panel_sentinel; panel = panel->next)
-        {
-            vec2 min_pos = v2(panel->bounds.min_pos.x, display_height - panel->bounds.max_pos.y);
-            vec2 dim = rect2_dim(panel->bounds);
-            u32 element_index = panel->begin_element_index * sizeof(u32);
-
-            gl.Scissor((GLint)min_pos.x, (GLint)min_pos.y, (GLsizei)dim.x, (GLsizei)dim.y);
-            gl.DrawElements(GL_TRIANGLES, panel->num_elements, GL_UNSIGNED_INT, (void *)element_index);
-        }
-
-        gl.Disable(GL_SCISSOR_TEST);
+        gl.Scissor((GLint)min_pos.x, (GLint)min_pos.y, (GLsizei)dim.x, (GLsizei)dim.y);
+        gl.DrawElements(GL_TRIANGLES, panel->num_elements, GL_UNSIGNED_INT, (void *)element_index);
     }
+
+    gl.Disable(GL_SCISSOR_TEST);
 
     ui->num_elements = 0;
     ui->num_vertices = 0;
@@ -185,7 +182,7 @@ static UPDATE_AND_RENDER(update_and_render)
         init_ui(&app_state->ui_state, input);
     }
 
-    gl.ClearColor(237.0f / 255.0f, 239.0f / 255.0f, 245.0f / 255.0f, 1.0f);
+    gl.ClearColor(27.0f / 255.0f, 27.0f / 255.0f, 29.0f / 255.0f, 1.0f);
     gl.Clear(GL_COLOR_BUFFER_BIT);
 
     UIState *ui = &app_state->ui_state;
@@ -195,23 +192,16 @@ static UPDATE_AND_RENDER(update_and_render)
         static u32 last_frame_num_elements = 0;
 
         // NOTE(dan): menu bar
+        begin_menu_bar(ui);
         {
-            ui->next_panel_pos  = v2(0.0f, 0.0f);
-            ui->next_panel_size = v2((f32)window_width, 25.0f);
-
-            push_style_vec2(ui, panel_padding, v2(0, 0));
-            begin_panel(ui, "Menu Bar");
+            if (button(ui, "File"))
             {
-                if (button(ui, "File"))
-                {
-                }
-                if (button(ui, "View"))
-                {
-                }
             }
-            end_panel(ui);
-            pop_style(ui);
+            if (button(ui, "View"))
+            {
+            }
         }
+        end_menu_bar(ui);
 
         // NOTE(dan): info panel
         {
@@ -248,7 +238,7 @@ static UPDATE_AND_RENDER(update_and_render)
 
                 textf_out(ui, "%24s = %s", "is_mouse_down", is_mouse_down(ui, mouse_button_left) ? "true" : "false");
                 newline(ui);
-                textf_out(ui, "%24s = %s", "is_mouse_clicked_in_rect", is_mouse_clicked_in_rect(ui, mouse_button_left, panel->bounds) ? "true" : "false");
+                textf_out(ui, "%24s = %s", "is_mouse_down_in_rect", is_mouse_down_in_rect(ui, mouse_button_left, panel->bounds) ? "true" : "false");
                 newline(ui);
                 textf_out(ui, "%24s = %s", "is_mouse_hovered_rect", is_mouse_hovered_rect(ui, panel->bounds) ? "true" : "false");
             }
@@ -273,6 +263,14 @@ static UPDATE_AND_RENDER(update_and_render)
                 newline(ui);
                 newline(ui);
                 textf_out(ui, "active = %s", (ui->active_panel) ? ui->active_panel->name : "(null)");
+
+                newline(ui);
+                
+                static b32 toggle_value = true;
+                if (button(ui, toggle_value ? "true" : "false"))
+                {
+                    toggle_value = !toggle_value;
+                }
             }
             end_panel(ui);
         }

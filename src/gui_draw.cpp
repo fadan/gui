@@ -176,6 +176,8 @@ static void add_poly_filled(UIState *ui, vec2 *vertices, u32 num_vertices, u32 c
 
 static void add_rect_outline(UIState *ui, vec2 top_left_corner, vec2 bottom_right_corner, u32 color)
 {
+    top_left_corner = vec2_add(top_left_corner, v2(0.5f, 0.5f));
+    bottom_right_corner = vec2_sub(bottom_right_corner, v2(0.5f, 0.5f));
     vec2 vertices[] =
     {
         v2(top_left_corner.x, top_left_corner.y),

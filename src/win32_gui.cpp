@@ -320,6 +320,12 @@ static void win32_update_input(PlatformInput *input, f32 dt)
     input->delta_wheel = 0;
     input->wheel = 0;
 
+    for (u32 mouse_button_index = 0; mouse_button_index < mouse_button_count; ++mouse_button_index)
+    {
+        input->mouse_buttons[mouse_button_index].pressed  = false;
+        input->mouse_buttons[mouse_button_index].released = false;
+    }
+
     win32_process_messages(input);
 
     input->wheel += input->delta_wheel;
