@@ -76,7 +76,11 @@ static Panel *get_or_create_panel(UIState *ui, char *name)
 static Panel *begin_panel(UIState *ui, char *name, u32 flags = PanelFlag_None)
 {
     Panel *panel = get_or_create_panel(ui, name);
+    panel->begin_vertex_index = ui->num_vertices;
+    panel->begin_element_index = ui->num_elements;
     panel->flags = flags;
+
+    ui->current_panel = panel;
 
     // NOTE(dan): handle drag
     rect2 header_bb = r2(panel->bounds.min_pos, panel->bounds.max_pos);
@@ -127,61 +131,35 @@ static Panel *begin_panel(UIState *ui, char *name, u32 flags = PanelFlag_None)
         add_rect_filled(ui, panel_bb.min_pos, panel_bb.max_pos, background_color);
     }
 
-    ui->current_panel = panel;
-
     // NOTE(dan): handle panel overlaps
+    if (is_mouse_clicked_in_rect(ui, mouse_button_left, panel->bounds))
     {
-        rect2 panel_bb = panel->bounds;
-        if (is_mouse_hovered_rect(ui, panel_bb))
+        Panel *panel_sentinel = &ui->panel_sentinel;
+        Panel *active_panel = 0;
+        for (Panel *test_panel = panel->next; test_panel != panel_sentinel; test_panel = test_panel->next)
         {
-            Panel *panel_sentinel = &ui->panel_sentinel;
-            Panel *active_panel = 0;
-            
-            if (is_mouse_down(ui, mouse_button_left))
+            if (vec2_intersect(ui->mouse_pos, test_panel->bounds.min_pos, test_panel->bounds.max_pos))
             {
-                for (Panel *test_panel = panel->next; test_panel != panel_sentinel; test_panel = test_panel->next)
-                {
-                    if (vec2_intersect(ui->mouse_pos, test_panel->bounds.min_pos, test_panel->bounds.max_pos))
-                    {
-                        active_panel = test_panel;
-                        break;
-                    }
-                }
+                active_panel = test_panel;
+                break;
             }
-            else
-            {
-                for (Panel *test_panel = panel_sentinel->next; test_panel != panel_sentinel; test_panel = test_panel->next)
-                {
-                    if (test_panel != panel)
-                    {
-                        if (rect2_intersect(panel_bb, test_panel->bounds))
-                        {
-                            active_panel = test_panel;
-                            break;
-                        }
-                    }
-                }
-            }
+        }
 
-            if (!active_panel)
+        if (!active_panel)
+        {
+            if (panel != panel_sentinel->prev)
             {
                 panel->prev->next = panel->next;
                 panel->next->prev = panel->prev;
 
-                dllist_insert_last(&ui->panel_sentinel, panel);
-
-                ui->active_panel = panel;
+                dllist_insert_last(panel_sentinel, panel);
             }
+
+            ui->active_panel = panel;
         }
     }
 
-    return panel;
-}
-
-inline void end_panel(UIState *ui)
-{
-    Panel *panel = ui->current_panel;
-
+    // NOTE(dan): handle resize
     if (panel->flags & PanelFlag_ResizableX || panel->flags & PanelFlag_ResizableY)
     {
         rect2 scaler_bb = r2(vec2_sub(panel->bounds.max_pos, ui->panel_padding), panel->bounds.max_pos);
@@ -232,6 +210,16 @@ inline void end_panel(UIState *ui)
         }
     }
 
+    return panel;
+}
+
+inline void end_panel(UIState *ui)
+{
+    Panel *panel = ui->current_panel;
+
+    panel->num_vertices = ui->num_vertices - panel->begin_vertex_index;
+    panel->num_elements = ui->num_elements - panel->begin_element_index;
+    
     ui->current_panel = 0;
 }
 

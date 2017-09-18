@@ -127,7 +127,20 @@ static void render_ui(UIState *ui, i32 display_width, i32 display_height)
         gl.BindBuffer(GL_ELEMENT_ARRAY_BUFFER, ui->ebo);
         gl.BufferData(GL_ELEMENT_ARRAY_BUFFER, ui->num_elements * sizeof(GLuint), ui->elements, GL_STREAM_DRAW);
 
-        gl.DrawElements(GL_TRIANGLES, ui->num_elements, GL_UNSIGNED_INT, 0);
+        gl.Enable(GL_SCISSOR_TEST);
+
+        Panel *panel_sentinel = &ui->panel_sentinel;
+        for (Panel *panel = panel_sentinel->next; panel != panel_sentinel; panel = panel->next)
+        {
+            vec2 min_pos = v2(panel->bounds.min_pos.x, display_height - panel->bounds.max_pos.y);
+            vec2 dim = rect2_dim(panel->bounds);
+            u32 element_index = panel->begin_element_index * sizeof(u32);
+
+            gl.Scissor((GLint)min_pos.x, (GLint)min_pos.y, (GLsizei)dim.x, (GLsizei)dim.y);
+            gl.DrawElements(GL_TRIANGLES, panel->num_elements, GL_UNSIGNED_INT, (void *)element_index);
+        }
+
+        gl.Disable(GL_SCISSOR_TEST);
     }
 
     ui->num_elements = 0;
@@ -178,6 +191,9 @@ static UPDATE_AND_RENDER(update_and_render)
     UIState *ui = &app_state->ui_state;
     begin_ui(ui, window_width, window_height);
     {
+        static u32 last_frame_num_vertices = 0;
+        static u32 last_frame_num_elements = 0;
+
         // NOTE(dan): menu bar
         {
             ui->next_panel_pos  = v2(0.0f, 0.0f);
@@ -216,7 +232,7 @@ static UPDATE_AND_RENDER(update_and_render)
 
                 textf_out(ui, "Frame time: %.3fs", input->dt);
                 newline(ui);
-                textf_out(ui, "Vertices: %d Elements: %d", ui->num_vertices, ui->num_elements);
+                textf_out(ui, "Vertices: %d Elements: %d", last_frame_num_vertices, last_frame_num_elements);
                 newline(ui);
                 textf_out(ui, "Memory blocks: %d Total: %d%s Used: %d%s", 
                           memory_stats.num_memblocks, total_size, total_size_unit, total_used, total_used_unit);
@@ -260,6 +276,9 @@ static UPDATE_AND_RENDER(update_and_render)
             }
             end_panel(ui);
         }
+
+        last_frame_num_vertices = ui->num_vertices;
+        last_frame_num_elements = ui->num_elements;
     }
     render_ui(ui, window_width, window_height);
 }
