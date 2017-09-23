@@ -70,6 +70,8 @@ static Panel *get_or_create_panel(UIState *ui, char *name)
     if (!panel)
     {
         allocate_freelist(panel, ui->first_free_panel, push_struct(&ui->memory, Panel));
+        *panel = {0};
+
         dllist_insert_last(&ui->panel_sentinel, panel);
 
         panel->id = id;
@@ -83,9 +85,10 @@ static Panel *get_or_create_panel(UIState *ui, char *name)
 static Panel *begin_panel(UIState *ui, char *name, u32 flags = PanelFlag_None)
 {
     Panel *panel = get_or_create_panel(ui, name);
+    panel->flags = flags;
+
     panel->begin_vertex_index = ui->num_vertices;
     panel->begin_element_index = ui->num_elements;
-    panel->flags = flags;
 
     // NOTE(dan): panel overlaps
     if (is_mouse_clicked_in_rect(ui, mouse_button_left, panel->bounds))
@@ -94,7 +97,7 @@ static Panel *begin_panel(UIState *ui, char *name, u32 flags = PanelFlag_None)
         Panel *active_panel = 0;
         for (Panel *test_panel = panel->next; test_panel != panel_sentinel; test_panel = test_panel->next)
         {
-            if (vec2_intersect(ui->mouse_pos, test_panel->bounds.min_pos, test_panel->bounds.max_pos))
+            if (!(panel->flags & PanelFlag_Hidden) && vec2_intersect(ui->mouse_pos, test_panel->bounds.min_pos, test_panel->bounds.max_pos))
             {
                 active_panel = test_panel;
                 break;
@@ -136,6 +139,7 @@ static Panel *begin_panel(UIState *ui, char *name, u32 flags = PanelFlag_None)
     panel->layout.min_pos = vec2_add(panel->bounds.min_pos, ui->panel_padding);
     panel->layout.max_pos = vec2_sub(panel->bounds.max_pos, ui->panel_padding);
     panel->layout_at = panel->layout.min_pos;
+    panel->layout_max = panel->layout.min_pos;
     panel->current_line_height = 0;
 
     // NOTE(dan): resizing
@@ -197,6 +201,7 @@ static Panel *begin_panel(UIState *ui, char *name, u32 flags = PanelFlag_None)
 
         panel->layout_at.y += header_dim.y;
         panel->layout.min_pos.y += header_dim.y;
+        panel->layout_max.y = max(panel->layout_max.y, panel->layout_at.y);
     }
 
     // NOTE(dan): draw panel background
@@ -233,7 +238,6 @@ static Panel *begin_panel(UIState *ui, char *name, u32 flags = PanelFlag_None)
         };
         add_poly_filled(ui, vertices, array_count(vertices), color);
     }
-
     return panel;
 }
 
@@ -244,7 +248,7 @@ inline void end_panel(UIState *ui)
     panel->num_vertices = ui->num_vertices - panel->begin_vertex_index;
     panel->num_elements = ui->num_elements - panel->begin_element_index;
     
-    ui->current_panel = 0;
+    ui->current_panel = panel->parent;
 }
 
 static Behavior button_behavior(UIState *ui, rect2 bounds)
@@ -295,7 +299,10 @@ static b32 button(UIState *ui, char *name)
     vec2 text_pos = vec2_add(bounds.min_pos, padding);
     add_text(ui, name, text_pos, ui->current_font.size, text_color);
 
+    panel->current_line_height = max(panel->current_line_height, button_size.y);
     panel->layout_at.x += button_size.x;
+    panel->layout_max.x = max(panel->layout_max.x, bounds.max_pos.x);
+    panel->layout_max.y = max(panel->layout_max.y, bounds.max_pos.y);
 
     b32 pressed = (behavior == Behavior_LeftClick);
     return pressed;
@@ -325,11 +332,138 @@ inline void end_menu_bar(UIState *ui)
     end_panel(ui);
 }
 
+inline void set_panel_topmost(UIState *ui, Panel *panel)
+{
+    Panel *panel_sentinel = &ui->panel_sentinel;
+    if (panel != panel_sentinel->prev)
+    {
+        panel->prev->next = panel->next;
+        panel->next->prev = panel->prev;
+
+        dllist_insert_last(panel_sentinel, panel);
+    }
+}
+
+static void remove_panel(UIState *ui, Panel *panel)
+{
+    panel->prev->next = panel->next;
+    panel->next->prev = panel->prev;
+
+    deallocate_freelist(panel, ui->first_free_panel);
+}
+
+static b32 begin_menu(UIState *ui, char *name)
+{
+    Panel *panel = ui->current_panel;
+
+    vec2 padding = ui->button_padding;
+    vec2 text_size = calc_text_size(ui, name, ui->current_font.size);
+    vec2 button_size = vec2_add(text_size, vec2_mul(2.0f, padding));
+
+    rect2 bounds = r2(panel->layout_at, vec2_add(panel->layout_at, button_size));
+    Behavior behavior = button_behavior(ui, bounds);
+    
+    u32 background_color = ui->colors[UIColor_ButtonBackground];
+    if (behavior == Behavior_Active || behavior == Behavior_LeftClick)
+    {
+        background_color = ui->colors[UIColor_ButtonBackgroundActive];
+    }
+    else if (behavior == Behavior_Hover)
+    {
+        background_color = ui->colors[UIColor_ButtonBackgroundHover];
+    }
+    add_rect_filled(ui, bounds.min_pos, bounds.max_pos, background_color);
+    
+    u32 text_color = ui->colors[UIColor_Text];
+    vec2 text_pos = vec2_add(bounds.min_pos, padding);
+    add_text(ui, name, text_pos, ui->current_font.size, text_color);
+
+    panel->layout_at.x += button_size.x;
+    panel->layout_max.x = max(panel->layout_max.x, bounds.max_pos.x);
+    panel->layout_max.y = max(panel->layout_max.y, bounds.max_pos.y);
+
+    ui->next_panel_pos = vec2_add(bounds.min_pos, v2(0.0f, button_size.y));
+    ui->next_panel_size = v2(button_size.x, button_size.y);
+
+    char child_name[32];
+    format_string(child_name, array_count(child_name), "%s/child", name);
+
+    Panel *child = get_or_create_panel(ui, child_name);
+    if (behavior == Behavior_LeftClick)
+    {
+        if (panel->child == child)
+        {
+            if (child->flags & PanelFlag_Hidden)
+            {
+                child->flags &= ~PanelFlag_Hidden;
+            }
+            else
+            {
+                child->flags |= PanelFlag_Hidden;
+            }
+        }
+        else
+        {
+            panel->child = child;
+            panel->child->flags &= ~PanelFlag_Hidden;
+        }
+    }
+    else if (behavior == Behavior_Hover && panel->child != 0 && !(panel->child->flags & PanelFlag_Hidden))
+    {
+        if (panel->child != child)
+        {
+            panel->child = child;
+            panel->child->flags &= ~PanelFlag_Hidden;
+        }
+    }
+
+    if (panel->child == child && !(child->flags & PanelFlag_Hidden))
+    {
+        begin_panel(ui, child_name, panel->child->flags);
+        set_panel_topmost(ui, child);
+        child->parent = panel;
+    }
+
+    b32 result = (panel->child == child && !(child->flags & PanelFlag_Hidden));
+    return result;
+}
+
+inline void end_menu(UIState *ui)
+{
+    Panel *panel = ui->current_panel;
+    if (panel->parent && panel->parent->child == panel && !(panel->flags & PanelFlag_Hidden))
+    {
+        if (ui->input->mouse_buttons[mouse_button_left].pressed && 
+            !vec2_intersect(ui->mouse_pos, vec2_sub(panel->bounds.min_pos, v2(0.0f, panel->current_line_height)), panel->bounds.max_pos))
+        {
+            panel->flags |= PanelFlag_Hidden;
+        }
+
+        panel->bounds.max_pos = panel->layout_max;
+        end_panel(ui);
+    }
+}
+
 inline void newline(UIState *ui)
 {
     Panel *panel = ui->current_panel;
     panel->layout_at.x = panel->layout.min_pos.x;
     panel->layout_at.y += panel->current_line_height;
+
+    panel->layout_max.y = max(panel->layout_max.y, panel->layout_at.y);
+
+}
+
+static b32 menu_button(UIState *ui, char *name)
+{
+    b32 result = button(ui, name);
+    Panel *panel = ui->current_panel;
+    if (result)
+    {
+        panel->flags |= PanelFlag_Hidden;
+    }
+    newline(ui);
+    return result;
 }
 
 inline void text_out(UIState *ui, char *text)

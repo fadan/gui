@@ -55,12 +55,15 @@ struct Font
 enum PanelFlags
 {
     PanelFlag_None,
+    PanelFlag_Hidden     = 1 << 0,
 
-    PanelFlag_Movable    = 1 << 0,
-    PanelFlag_HasHeader  = 1 << 1,
-    PanelFlag_ResizableX = 1 << 2,
-    PanelFlag_ResizableY = 1 << 3,
-    PanelFlag_Bordered   = 1 << 4,
+    PanelFlag_Movable    = 1 << 1,
+    PanelFlag_HasHeader  = 1 << 2,
+    PanelFlag_ResizableX = 1 << 3,
+    PanelFlag_ResizableY = 1 << 4,
+    PanelFlag_Bordered   = 1 << 5,
+
+    PanelFlag_Popup      = 1 << 6,
 
     PanelFlag_Resizable = (PanelFlag_ResizableX | PanelFlag_ResizableY),
     PanelFlag_Default   = (PanelFlag_Movable | PanelFlag_Resizable | PanelFlag_HasHeader | PanelFlag_Bordered),
@@ -83,6 +86,8 @@ struct Panel
         Panel *next_free;
     };
     Panel *prev;
+    Panel *parent;
+    Panel *child;
 
     u32 id;
     u32 flags;
@@ -92,6 +97,7 @@ struct Panel
     rect2 bounds;
     rect2 layout;
     vec2 layout_at;
+    vec2 layout_max;
 
     f32 current_line_height;
 

@@ -18,8 +18,8 @@
 #define STB_TRUETYPE_IMPLEMENTATION
 #include "stb_truetype.h"
 
-#define MAX_NUM_VERTICES 2048
-#define MAX_NUM_ELEMENTS 4096
+#define MAX_NUM_VERTICES 4096
+#define MAX_NUM_ELEMENTS 8192
 
 #include "format_string.h"
 
@@ -130,12 +130,15 @@ static void render_ui(UIState *ui, i32 display_width, i32 display_height)
     Panel *panel_sentinel = &ui->panel_sentinel;
     for (Panel *panel = panel_sentinel->next; panel != panel_sentinel; panel = panel->next)
     {
-        vec2 min_pos = v2(panel->bounds.min_pos.x, display_height - panel->bounds.max_pos.y);
-        vec2 dim = rect2_dim(panel->bounds);
-        u32 element_index = panel->begin_element_index * sizeof(u32);
+        if (!(panel->flags & PanelFlag_Hidden))
+        {
+            vec2 min_pos = v2(panel->bounds.min_pos.x, display_height - panel->bounds.max_pos.y);
+            vec2 dim = rect2_dim(panel->bounds);
+            u32 element_index = panel->begin_element_index * sizeof(u32);
 
-        gl.Scissor((GLint)min_pos.x, (GLint)min_pos.y, (GLsizei)dim.x, (GLsizei)dim.y);
-        gl.DrawElements(GL_TRIANGLES, panel->num_elements, GL_UNSIGNED_INT, (void *)element_index);
+            gl.Scissor((GLint)min_pos.x, (GLint)min_pos.y, (GLsizei)dim.x, (GLsizei)dim.y);
+            gl.DrawElements(GL_TRIANGLES, panel->num_elements, GL_UNSIGNED_INT, (void *)element_index);
+        }
     }
 
     gl.Disable(GL_SCISSOR_TEST);
@@ -194,18 +197,34 @@ static UPDATE_AND_RENDER(update_and_render)
         // NOTE(dan): menu bar
         begin_menu_bar(ui);
         {
-            if (button(ui, "File"))
+            if (begin_menu(ui, "File"))
             {
+                if (menu_button(ui, "Exit"))
+                {
+                    input->quit_requested = true;
+                }
             }
-            if (button(ui, "View"))
+            end_menu(ui);
+
+            if (begin_menu(ui, "View"))
             {
+                if (menu_button(ui, "Test 1"))
+                {
+                }
+                if (menu_button(ui, "Test 2"))
+                {
+                }
+                if (menu_button(ui, "Test 3"))
+                {
+                }
             }
+            end_menu(ui);
         }
         end_menu_bar(ui);
 
         // NOTE(dan): info panel
         {
-            ui->next_panel_pos  = v2(0.0f, 30.0f);
+            ui->next_panel_pos  = v2(660.0f, 30.0f);
             ui->next_panel_size = v2(300.0f, 200.0f);
 
             Panel *panel = begin_panel(ui, "Info", PanelFlag_Default);
@@ -248,23 +267,30 @@ static UPDATE_AND_RENDER(update_and_render)
         // NOTE(dan): test panel
         {
             ui->next_panel_pos = v2(350.0f, 30.0f);
-            ui->next_panel_size = v2(300.0f, 200.0f);
+            ui->next_panel_size = v2(300.0f, 500.0f);
 
             Panel *panel = begin_panel(ui, "Test", PanelFlag_Default);
             {
-                text_out(ui, "sentinel > ");
+                text_out(ui, "Panels: ");
+                newline(ui);
 
                 Panel *sentinel = &ui->panel_sentinel;
                 for (Panel *p = sentinel->next; p != sentinel; p = p->next)
                 {
-                    textf_out(ui, "%s > ", p->name);
+                    textf_out(ui, "%s:", p->name);
+                    newline(ui);
+                    textf_out(ui, "bounds: min(%.1f, %.1f) max(%.1f, %.1f)", p->bounds.min_pos.x, p->bounds.min_pos.y, p->bounds.max_pos.x, p->bounds.max_pos.y);
+                    newline(ui);
+                    textf_out(ui, "parent: %s", p->parent ? p->parent->name : "(null)");
+                    newline(ui);
+                    textf_out(ui, "child: %s", p->child ? p->child->name : "(null)");
+                    newline(ui);
+                    textf_out(ui, "hidden: %s", (p->flags & PanelFlag_Hidden) ? "true" : "false");
+                    newline(ui);
+                    textf_out(ui, "popup: %s", (p->flags & PanelFlag_Popup) ? "true" : "false");
+                    newline(ui);
+                    newline(ui);
                 }
-                text_out(ui, "sentinel");
-                newline(ui);
-                newline(ui);
-                textf_out(ui, "active = %s", (ui->active_panel) ? ui->active_panel->name : "(null)");
-
-                newline(ui);
                 
                 static b32 toggle_value = true;
                 if (button(ui, toggle_value ? "true" : "false"))
