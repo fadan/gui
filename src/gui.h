@@ -86,8 +86,12 @@ struct Panel
         Panel *next_free;
     };
     Panel *prev;
+    Panel *first_child;
+    Panel *last_child;
+
+    // TODO(dan): do we need these?
     Panel *parent;
-    Panel *child;
+    Panel *popup;
 
     u32 id;
     u32 flags;
@@ -104,6 +108,19 @@ struct Panel
     u32 begin_element_index;
     u32 num_elements;
 };
+
+inline Panel *get_panel_sentinel(Panel *from)
+{
+    Panel *panel = (Panel *)(&from->first_child);
+    return panel;
+}
+
+inline b32 panel_has_children(Panel *panel)
+{
+    Panel *sentinel = get_panel_sentinel(panel);
+    b32 has_children = (panel->first_child != sentinel);
+    return has_children;
+}
 
 enum UIColors
 {
@@ -182,7 +199,7 @@ struct UIState
     vec2 min_pos;
     vec2 max_pos;
 
-    Panel panel_sentinel;
+    Panel *root_panel;
     Panel *first_free_panel;
     Panel *current_panel;
     Panel *active_panel;

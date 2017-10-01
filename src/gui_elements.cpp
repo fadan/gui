@@ -47,56 +47,83 @@ inline b32 was_mouse_hovered_rect(UIState *ui, rect2 rect)
     return was_hovered_rect;
 }
 
-inline Panel *find_panel_by_id(UIState *ui, u32 id)
+static Panel *find_panel_by_id(Panel *panel, u32 id)
 {
-    Panel *panel_sentinel = &ui->panel_sentinel;
-    Panel *panel = 0;
-    for (Panel *test_panel = panel_sentinel->next; test_panel != panel_sentinel; test_panel = test_panel->next)
+    Panel *found_panel = 0;
+    if (panel->id == id)
     {
-        if (test_panel->id == id)
+        found_panel = panel;
+    }
+
+    if (!found_panel && panel_has_children(panel))
+    {
+        Panel *sentinel = get_panel_sentinel(panel);
+        for (Panel *child = panel->first_child; !found_panel && child != sentinel; child = child->next)
         {
-            panel = test_panel;
-            break;
+            found_panel = find_panel_by_id(child, id);
         }
     }
+    return found_panel;
+}
+
+static Panel *create_panel(UIState *ui, char *name)
+{
+    Panel *panel = 0;
+    allocate_freelist(panel, ui->first_free_panel, push_struct(&ui->memory, Panel));
+    *panel = {0};
+
+    Panel *sentinel = get_panel_sentinel(panel);
+    dllist_init(sentinel);
+
+    panel->id = djb2_hash(name);
+    copy_string_and_null_terminate(name, panel->name, array_count(panel->name));
     return panel;
 }
 
-static Panel *get_or_create_panel(UIState *ui, char *name)
+static void add_panel_to_parent(Panel *panel, Panel *parent)
 {
+    Panel *sentinel = get_panel_sentinel(parent);
+    dllist_insert_last(sentinel, panel);
+}
+
+static Panel *get_or_create_panel(UIState *ui, char *name, Panel *parent = 0)
+{
+    Panel *panel = 0;
     u32 id = djb2_hash(name);
 
-    Panel *panel = find_panel_by_id(ui, id);
+    if (!parent)
+    {
+        parent = ui->root_panel;
+    }
+
+    panel = find_panel_by_id(parent, id);
     if (!panel)
     {
-        allocate_freelist(panel, ui->first_free_panel, push_struct(&ui->memory, Panel));
-        *panel = {0};
-
-        dllist_insert_last(&ui->panel_sentinel, panel);
-
-        panel->id = id;
+        panel = create_panel(ui, name);
         panel->bounds = rect2_min_dim(ui->next_panel_pos, ui->next_panel_size);
-
-        copy_string_and_null_terminate(name, panel->name, array_count(panel->name));
+        panel->parent = parent;
+        add_panel_to_parent(panel, parent);
     }
     return panel;
 }
 
-static Panel *begin_panel(UIState *ui, char *name, u32 flags = PanelFlag_None)
+static Panel *begin_panel(UIState *ui, char *name, u32 flags = PanelFlag_None, Panel *parent = 0)
 {
-    Panel *panel = get_or_create_panel(ui, name);
-    panel->flags = flags;
+    Panel *panel = get_or_create_panel(ui, name, parent);
 
+    panel->flags = flags;
     panel->begin_element_index = ui->num_elements;
 
     // NOTE(dan): panel overlaps
     if (is_mouse_clicked_in_rect(ui, mouse_button_left, panel->bounds))
     {
-        Panel *panel_sentinel = &ui->panel_sentinel;
         Panel *active_panel = 0;
-        for (Panel *test_panel = panel->next; test_panel != panel_sentinel; test_panel = test_panel->next)
+        Panel *root_panel = ui->root_panel;
+        Panel *sentinel = get_panel_sentinel(root_panel);
+
+        for (Panel *test_panel = root_panel->first_child; test_panel != sentinel; test_panel = test_panel->next)
         {
-            if (!(panel->flags & PanelFlag_Hidden) && vec2_intersect(ui->mouse_pos, test_panel->bounds.min_pos, test_panel->bounds.max_pos))
+            if (test_panel != panel && !(test_panel->flags & PanelFlag_Hidden) && vec2_intersect(ui->mouse_pos, test_panel->bounds.min_pos, test_panel->bounds.max_pos))
             {
                 active_panel = test_panel;
                 break;
@@ -105,12 +132,12 @@ static Panel *begin_panel(UIState *ui, char *name, u32 flags = PanelFlag_None)
 
         if (!active_panel)
         {
-            if (panel != panel_sentinel->prev)
+            if (panel != sentinel->prev)
             {
                 panel->prev->next = panel->next;
                 panel->next->prev = panel->prev;
 
-                dllist_insert_last(panel_sentinel, panel);
+                dllist_insert_last(sentinel, panel);
             }
 
             ui->active_panel = panel;
@@ -329,18 +356,6 @@ inline void end_menu_bar(UIState *ui)
     end_panel(ui);
 }
 
-inline void set_panel_topmost(UIState *ui, Panel *panel)
-{
-    Panel *panel_sentinel = &ui->panel_sentinel;
-    if (panel != panel_sentinel->prev)
-    {
-        panel->prev->next = panel->next;
-        panel->next->prev = panel->prev;
-
-        dllist_insert_last(panel_sentinel, panel);
-    }
-}
-
 static void remove_panel(UIState *ui, Panel *panel)
 {
     panel->prev->next = panel->next;
@@ -385,10 +400,10 @@ static b32 begin_menu(UIState *ui, char *name)
     char child_name[32];
     format_string(child_name, array_count(child_name), "%s/child", name);
 
-    Panel *child = get_or_create_panel(ui, child_name);
+    Panel *child = get_or_create_panel(ui, child_name, panel);
     if (behavior == Behavior_LeftClick)
     {
-        if (panel->child == child)
+        if (panel->popup == child)
         {
             if (child->flags & PanelFlag_Hidden)
             {
@@ -401,34 +416,33 @@ static b32 begin_menu(UIState *ui, char *name)
         }
         else
         {
-            panel->child = child;
-            panel->child->flags &= ~PanelFlag_Hidden;
+            panel->popup = child;
+            panel->popup->flags &= ~PanelFlag_Hidden;
         }
     }
-    else if (behavior == Behavior_Hover && panel->child != 0 && !(panel->child->flags & PanelFlag_Hidden))
+    else if (behavior == Behavior_Hover && panel->popup != 0 && !(panel->popup->flags & PanelFlag_Hidden))
     {
-        if (panel->child != child)
+        if (panel->popup != child)
         {
-            panel->child = child;
-            panel->child->flags &= ~PanelFlag_Hidden;
+            panel->popup = child;
+            panel->popup->flags &= ~PanelFlag_Hidden;
         }
     }
 
-    if (panel->child == child && !(child->flags & PanelFlag_Hidden))
+    if (panel->popup == child && !(child->flags & PanelFlag_Hidden))
     {
-        begin_panel(ui, child_name, panel->child->flags);
-        set_panel_topmost(ui, child);
+        begin_panel(ui, child_name, panel->popup->flags);
         child->parent = panel;
     }
 
-    b32 result = (panel->child == child && !(child->flags & PanelFlag_Hidden));
+    b32 result = (panel->popup == child && !(child->flags & PanelFlag_Hidden));
     return result;
 }
 
 inline void end_menu(UIState *ui)
 {
     Panel *panel = ui->current_panel;
-    if (panel->parent && panel->parent->child == panel && !(panel->flags & PanelFlag_Hidden))
+    if (panel->parent && panel->parent->popup == panel && !(panel->flags & PanelFlag_Hidden))
     {
         if (ui->input->mouse_buttons[mouse_button_left].pressed && 
             !vec2_intersect(ui->mouse_pos, vec2_sub(panel->bounds.min_pos, v2(0.0f, panel->current_line_height)), panel->bounds.max_pos))

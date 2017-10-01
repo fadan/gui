@@ -18,7 +18,7 @@
 #define STB_TRUETYPE_IMPLEMENTATION
 #include "stb_truetype.h"
 
-#define MAX_NUM_VERTICES 4096
+#define MAX_NUM_VERTICES 8192
 #define MAX_NUM_ELEMENTS 8192
 
 #include "format_string.h"
@@ -52,6 +52,8 @@ static void init_ui(UIState *ui, PlatformInput *input)
     ui->num_elements = 0;
     ui->vertices = push_array(&ui->memory, MAX_NUM_VERTICES, Vertex);
     ui->elements = push_array(&ui->memory, MAX_NUM_ELEMENTS, GLuint);
+
+    ui->root_panel = create_panel(ui, "Root Panel");
 
     char error[1024];
     ui->program = opengl_create_program(ui_vertex_shader, ui_fragment_shader, error, sizeof(error));
@@ -91,8 +93,28 @@ static void init_ui(UIState *ui, PlatformInput *input)
     gl.TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
     gl.TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
     gl.TexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, font->texture_width, font->texture_height, 0, GL_RGBA, GL_UNSIGNED_BYTE, font->texture_pixels);
+}
 
-    dllist_init(&ui->panel_sentinel);
+static void draw_panel(Panel *panel, u32 display_width, u32 display_height)
+{
+    if (panel->num_elements && !(panel->flags & PanelFlag_Hidden))
+    {
+        vec2 min_pos = v2(panel->bounds.min_pos.x, display_height - panel->bounds.max_pos.y);
+        vec2 dim = rect2_dim(panel->bounds);
+        u32 element_index = panel->begin_element_index * sizeof(u32);
+
+        gl.Scissor((GLint)min_pos.x, (GLint)min_pos.y, (GLsizei)dim.x, (GLsizei)dim.y);
+        gl.DrawElements(GL_TRIANGLES, panel->num_elements, GL_UNSIGNED_INT, (void *)element_index);
+    }
+
+    if (panel_has_children(panel))
+    {
+        Panel *sentinel = get_panel_sentinel(panel);
+        for (Panel *child = panel->first_child; child != sentinel; child = child->next)
+        {
+            draw_panel(child, display_width, display_height);
+        }
+    }
 }
 
 static void render_ui(UIState *ui, i32 display_width, i32 display_height)
@@ -126,21 +148,7 @@ static void render_ui(UIState *ui, i32 display_width, i32 display_height)
     gl.BufferData(GL_ELEMENT_ARRAY_BUFFER, ui->num_elements * sizeof(GLuint), ui->elements, GL_STREAM_DRAW);
 
     gl.Enable(GL_SCISSOR_TEST);
-
-    Panel *panel_sentinel = &ui->panel_sentinel;
-    for (Panel *panel = panel_sentinel->next; panel != panel_sentinel; panel = panel->next)
-    {
-        if (!(panel->flags & PanelFlag_Hidden))
-        {
-            vec2 min_pos = v2(panel->bounds.min_pos.x, display_height - panel->bounds.max_pos.y);
-            vec2 dim = rect2_dim(panel->bounds);
-            u32 element_index = panel->begin_element_index * sizeof(u32);
-
-            gl.Scissor((GLint)min_pos.x, (GLint)min_pos.y, (GLsizei)dim.x, (GLsizei)dim.y);
-            gl.DrawElements(GL_TRIANGLES, panel->num_elements, GL_UNSIGNED_INT, (void *)element_index);
-        }
-    }
-
+    draw_panel(ui->root_panel, display_width, display_height);
     gl.Disable(GL_SCISSOR_TEST);
 
     ui->num_elements = 0;
@@ -167,6 +175,40 @@ inline void change_unit_and_size(char **unit, usize *size)
     }
 }
 
+static void test_panel_hierarchy(UIState *ui, Panel *p, u32 tab_size = 0)
+{
+    Panel *current_panel = ui->current_panel;
+    current_panel->layout.min_pos.x = current_panel->bounds.min_pos.x + ui->panel_padding.x + tab_size;
+    current_panel->layout_at.x = current_panel->layout.min_pos.x;
+    tab_size += (u32)ui->panel_padding.x;
+
+    textf_out(ui, "%s:", p->name);
+    newline(ui);
+    textf_out(ui, "bounds.min: vec2(%.1f, %.1f)", p->bounds.min_pos.x, p->bounds.min_pos.y);
+    newline(ui);
+    textf_out(ui, "bounds.max: vec2(%.1f, %.1f)", p->bounds.max_pos.x, p->bounds.max_pos.y); 
+    newline(ui);
+    textf_out(ui, "%-11s %s", "parent:", p->parent ? p->parent->name : "(null)");
+    newline(ui);
+    textf_out(ui, "%-11s %s", "hidden:", (p->flags & PanelFlag_Hidden) ? "true" : "false");
+    newline(ui);
+    textf_out(ui, "%-11s %s", "popup:", (p->flags & PanelFlag_Popup) ? "true" : "false");
+    newline(ui);
+    newline(ui);
+
+    if (panel_has_children(p))
+    {
+        Panel *sentinel = get_panel_sentinel(p);
+        for (Panel *child = p->first_child; child != sentinel; child = child->next)
+        {
+            test_panel_hierarchy(ui, child, tab_size);
+        }
+    }
+
+    current_panel->layout.min_pos.x = current_panel->bounds.min_pos.x + ui->panel_padding.x;
+    current_panel->layout_at.x = current_panel->layout.min_pos.x;
+}
+
 static UPDATE_AND_RENDER(update_and_render)
 {
     AppState *app_state = memory->app_state;
@@ -185,7 +227,6 @@ static UPDATE_AND_RENDER(update_and_render)
         init_ui(&app_state->ui_state, input);
     }
 
-    // gl.ClearColor(27.0f / 255.0f, 27.0f / 255.0f, 29.0f / 255.0f, 1.0f);
     gl.ClearColor(14.0f / 255.0f, 28.0f / 255.0f, 42.0f / 255.0f, 1.0f);
     gl.Clear(GL_COLOR_BUFFER_BIT);
 
@@ -272,26 +313,7 @@ static UPDATE_AND_RENDER(update_and_render)
 
             Panel *panel = begin_panel(ui, "Test", PanelFlag_Default);
             {
-                text_out(ui, "Panels: ");
-                newline(ui);
-
-                Panel *sentinel = &ui->panel_sentinel;
-                for (Panel *p = sentinel->next; p != sentinel; p = p->next)
-                {
-                    textf_out(ui, "%s:", p->name);
-                    newline(ui);
-                    textf_out(ui, "bounds: min(%.1f, %.1f) max(%.1f, %.1f)", p->bounds.min_pos.x, p->bounds.min_pos.y, p->bounds.max_pos.x, p->bounds.max_pos.y);
-                    newline(ui);
-                    textf_out(ui, "parent: %s", p->parent ? p->parent->name : "(null)");
-                    newline(ui);
-                    textf_out(ui, "child: %s", p->child ? p->child->name : "(null)");
-                    newline(ui);
-                    textf_out(ui, "hidden: %s", (p->flags & PanelFlag_Hidden) ? "true" : "false");
-                    newline(ui);
-                    textf_out(ui, "popup: %s", (p->flags & PanelFlag_Popup) ? "true" : "false");
-                    newline(ui);
-                    newline(ui);
-                }
+                test_panel_hierarchy(ui, ui->root_panel);
                 
                 static b32 toggle_value = true;
                 if (button(ui, toggle_value ? "true" : "false"))
