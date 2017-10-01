@@ -101,11 +101,7 @@ struct Panel
 
     f32 current_line_height;
 
-    // NOTE(dan): for drawing
-
-    u32 begin_vertex_index;
     u32 begin_element_index;
-    u32 num_vertices;
     u32 num_elements;
 };
 

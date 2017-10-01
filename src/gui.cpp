@@ -185,7 +185,8 @@ static UPDATE_AND_RENDER(update_and_render)
         init_ui(&app_state->ui_state, input);
     }
 
-    gl.ClearColor(27.0f / 255.0f, 27.0f / 255.0f, 29.0f / 255.0f, 1.0f);
+    // gl.ClearColor(27.0f / 255.0f, 27.0f / 255.0f, 29.0f / 255.0f, 1.0f);
+    gl.ClearColor(14.0f / 255.0f, 28.0f / 255.0f, 42.0f / 255.0f, 1.0f);
     gl.Clear(GL_COLOR_BUFFER_BIT);
 
     UIState *ui = &app_state->ui_state;

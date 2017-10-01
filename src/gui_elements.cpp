@@ -87,7 +87,6 @@ static Panel *begin_panel(UIState *ui, char *name, u32 flags = PanelFlag_None)
     Panel *panel = get_or_create_panel(ui, name);
     panel->flags = flags;
 
-    panel->begin_vertex_index = ui->num_vertices;
     panel->begin_element_index = ui->num_elements;
 
     // NOTE(dan): panel overlaps
@@ -245,7 +244,6 @@ inline void end_panel(UIState *ui)
 {
     Panel *panel = ui->current_panel;
 
-    panel->num_vertices = ui->num_vertices - panel->begin_vertex_index;
     panel->num_elements = ui->num_elements - panel->begin_element_index;
     
     ui->current_panel = panel->parent;
@@ -310,15 +308,14 @@ static b32 button(UIState *ui, char *name)
 
 inline Panel *begin_menu_bar(UIState *ui)
 {
-    ui->next_panel_pos  = v2(0.0f, 0.0f);
-    ui->next_panel_size = v2(ui->max_pos.x - ui->min_pos.x, ui->menu_bar_height);
-
     push_style_vec2(ui, panel_padding, ui->menu_bar_padding);
     push_style_vec2(ui, button_padding, ui->menu_bar_button_padding);
     push_style_color(ui, UIColor_PanelBackground,  ui->colors[UIColor_PanelHeaderBackground]);
     push_style_color(ui, UIColor_ButtonBackground, ui->colors[UIColor_PanelHeaderBackground]);
 
     Panel *panel = begin_panel(ui, "Menu Bar");
+    panel->bounds.min_pos = v2(0.0f, 0.0f);
+    panel->bounds.max_pos = v2(ui->max_pos.x - ui->min_pos.x, ui->menu_bar_height);
     return panel;
 }
 
@@ -451,7 +448,6 @@ inline void newline(UIState *ui)
     panel->layout_at.y += panel->current_line_height;
 
     panel->layout_max.y = max(panel->layout_max.y, panel->layout_at.y);
-
 }
 
 static b32 menu_button(UIState *ui, char *name)
